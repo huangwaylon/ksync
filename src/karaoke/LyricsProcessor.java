@@ -21,6 +21,7 @@ public class LyricsProcessor {
 
 	private String[][] lyrics;
 	private long[][] wordTimestamps;
+
 	private JLabel[][] labels;
 	private JLabel[][] timeLabels;
 
@@ -154,6 +155,10 @@ public class LyricsProcessor {
 			return;
 		}
 
+		if (pIndex < 0 || wIndex < 0) {
+			return;
+		}
+
 		// Re-color current index.
 		if (wordTimestamps[phraseIndex][wordIndex] > 0) {
 			labels[phraseIndex][wordIndex].setBackground(Color.LIGHT_GRAY);
@@ -235,7 +240,6 @@ public class LyricsProcessor {
 
 	public void update(long playbackPosition) {
 		if (wordTimestamps == null || lyrics == null || labels == null) {
-			System.err.println("wordTimestamps, lyrics, or labels is null.");
 			return;
 		}
 	}
@@ -282,5 +286,13 @@ public class LyricsProcessor {
 			pIndex = indexPair[0];
 			wIndex = indexPair[1];
 		}
+	}
+
+	public String[][] getLyrics() {
+		return lyrics;
+	}
+
+	public long[][] getTimestamps() {
+		return wordTimestamps;
 	}
 }

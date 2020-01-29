@@ -35,7 +35,7 @@ public class Main {
 
 	private static String audioFilePath;
 
-	private static final AudioPlayer player = new AudioPlayer();
+	public static final AudioPlayer player = new AudioPlayer();
 	private static final Transcoder transcoder = new Transcoder();
 
 	private static final WaveReactor waveReactor = new WaveReactor(player);
@@ -44,6 +44,8 @@ public class Main {
 	private static final TimerService timerService = new TimerService(intervalUpdater);
 
 	private static final LyricsProcessor lyricsProcessor = new LyricsProcessor(displayPanel, player);
+
+	private static final OutputSequencer outputSequencer = new OutputSequencer();
 
 	public static void main(String args[]) {
 		SwingUtilities.invokeLater(new Runnable() {
@@ -73,7 +75,16 @@ public class Main {
 
 		JMenuItem m11 = new JMenuItem("Open Project");
 		JMenuItem m22 = new JMenuItem("Save Project");
-		JMenuItem m33 = new JMenuItem("Export");
+		JMenuItem m33 = new JMenuItem(new AbstractAction("Export") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				System.out.println("Export");
+				outputSequencer.sequence(lyricsProcessor, player);
+			}
+		});
+
 		m1.add(m11);
 		m1.add(m22);
 		m1.add(m33);
@@ -105,14 +116,11 @@ public class Main {
 
 		JPanel lyricsTopPanel = new JPanel();
 		lyricsTopPanel.setLayout(new BoxLayout(lyricsTopPanel, BoxLayout.LINE_AXIS));
-
 		JLabel lyricsLabel = new JLabel("Lyrics");
-		lyricsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 		String[] splitOptions = new String[] { "Word", "Character", "Phrase" };
 		JComboBox<String> splitComboBox = new JComboBox<String>(splitOptions);
-
 		lyricsTopPanel.add(lyricsLabel);
-		lyricsTopPanel.add(Box.createRigidArea(new Dimension(10, 0)));
+		lyricsTopPanel.add(Box.createHorizontalStrut(10));
 		lyricsTopPanel.add(splitComboBox);
 
 		JTextArea lyricsTextArea = new JTextArea();
@@ -133,13 +141,39 @@ public class Main {
 
 		JPanel lyricsInputPanel = new JPanel();
 		lyricsInputPanel.setLayout(new BoxLayout(lyricsInputPanel, BoxLayout.PAGE_AXIS));
-		lyricsInputPanel.add(lyricsTopPanel);
-		lyricsInputPanel.add(Box.createRigidArea(new Dimension(0, 5)));
 		lyricsInputPanel.add(lyricsScrollPane);
-		lyricsInputPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+		lyricsInputPanel.add(Box.createVerticalStrut(5));
+		lyricsInputPanel.add(lyricsTopPanel);
+		lyricsInputPanel.add(Box.createVerticalStrut(5));
 
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, lyricsInputPanel, displayScrollPane);
 		splitPane.setContinuousLayout(true);
+
+		JTextField widthTextField = new JTextField("1920");
+		JTextField heightTextField = new JTextField("1080");
+
+		JPanel widthPanel = new JPanel();
+		widthPanel.setLayout(new BoxLayout(widthPanel, BoxLayout.LINE_AXIS));
+		widthPanel.add(new JLabel("Width"));
+		widthPanel.add(widthTextField);
+
+		JPanel heightPanel = new JPanel();
+		heightPanel.setLayout(new BoxLayout(heightPanel, BoxLayout.LINE_AXIS));
+		heightPanel.add(new JLabel("Height"));
+		heightPanel.add(heightTextField);
+
+		JPanel fpsPanel = new JPanel();
+		fpsPanel.setLayout(new BoxLayout(fpsPanel, BoxLayout.LINE_AXIS));
+		String[] fpsOptions = new String[] { "24:1", "25:1", "30:1", "60:1" };
+		JComboBox<String> fpsComboBox = new JComboBox<String>(fpsOptions);
+		fpsPanel.add(new JLabel("FPS"));
+		fpsPanel.add(fpsComboBox);
+
+		JPanel dimensionsPanel = new JPanel();
+		dimensionsPanel.setLayout(new BoxLayout(dimensionsPanel, BoxLayout.PAGE_AXIS));
+		dimensionsPanel.add(widthPanel);
+		dimensionsPanel.add(heightPanel);
+		dimensionsPanel.add(fpsPanel);
 
 		JButton browseSong = new JButton("Browse Song");
 		JLabel pathLabel = new JLabel("Path");
@@ -164,20 +198,62 @@ public class Main {
 		fontOptionsPanel.add(fontPathField);
 
 		JPanel colorOptionsPanel = new JPanel();
-		colorOptionsPanel.setLayout(new BoxLayout(colorOptionsPanel, BoxLayout.LINE_AXIS));
+		colorOptionsPanel.setLayout(new BoxLayout(colorOptionsPanel, BoxLayout.PAGE_AXIS));
+		JPanel colorInsidePanel = new JPanel();
+		colorInsidePanel.setLayout(new GridLayout(3, 2));
 		JButton normalColor = new JButton("Normal");
+		JButton outlineColor = new JButton("Normal Outline");
 		JButton highlightColor = new JButton("Highlight");
-		JButton outlineColor = new JButton("Outline");
+		JButton highlightOutlineColor = new JButton("Highlight Outline");
+		JButton backgroundColor = new JButton("Background");
+		colorInsidePanel.add(normalColor);
+		colorInsidePanel.add(outlineColor);
+		colorInsidePanel.add(highlightColor);
+		colorInsidePanel.add(highlightOutlineColor);
+		colorInsidePanel.add(backgroundColor);
+
 		colorOptionsPanel.add(new JLabel("Colors:"));
-		colorOptionsPanel.add(normalColor);
-		colorOptionsPanel.add(highlightColor);
-		colorOptionsPanel.add(outlineColor);
+		colorOptionsPanel.add(colorInsidePanel);
+
+		normalColor.setBorderPainted(false);
+		highlightColor.setBorderPainted(false);
+		outlineColor.setBorderPainted(false);
+		highlightOutlineColor.setBorderPainted(false);
+		backgroundColor.setBorderPainted(false);
+		normalColor.setOpaque(true);
+		highlightColor.setOpaque(true);
+		outlineColor.setOpaque(true);
+		highlightOutlineColor.setOpaque(true);
+		backgroundColor.setOpaque(true);
+
+		normalColor.setBackground(Color.white);
+		outlineColor.setBackground(Color.black);
+		highlightColor.setBackground(Color.blue);
+		highlightOutlineColor.setBackground(Color.white);
+		backgroundColor.setBackground(Color.green);
+
+		outputSequencer.setNormal(normalColor.getBackground());
+		outputSequencer.setOutline(outlineColor.getBackground());
+		outputSequencer.setHighlight(highlightColor.getBackground());
+		outputSequencer.setHighlightOutline(highlightOutlineColor.getBackground());
+		outputSequencer.setBackground(backgroundColor.getBackground());
+
+		normalColor.setForeground(Color.DARK_GRAY);
+		outlineColor.setForeground(Color.DARK_GRAY);
+		highlightColor.setForeground(Color.DARK_GRAY);
+		highlightOutlineColor.setForeground(Color.DARK_GRAY);
+		backgroundColor.setForeground(Color.DARK_GRAY);
 
 		JPanel projectPanel = new JPanel();
 		projectPanel.setLayout(new BoxLayout(projectPanel, BoxLayout.PAGE_AXIS));
 		projectPanel.add(projectOptionsPanel);
 		projectPanel.add(fontOptionsPanel);
-		projectPanel.add(colorOptionsPanel);
+
+		JPanel topPanel = new JPanel();
+		topPanel.setLayout(new GridLayout(0, 3));
+		topPanel.add(projectPanel);
+		topPanel.add(dimensionsPanel);
+		topPanel.add(colorOptionsPanel);
 
 		JPanel audioControlPanel = new JPanel();
 		audioControlPanel.setLayout(new BoxLayout(audioControlPanel, BoxLayout.PAGE_AXIS));
@@ -202,7 +278,7 @@ public class Main {
 		audioControlPanel.add(syncPanel);
 		audioControlPanel.add(fxPanel);
 
-		mainPanel.add(BorderLayout.NORTH, projectPanel);
+		mainPanel.add(BorderLayout.NORTH, topPanel);
 		mainPanel.add(BorderLayout.CENTER, splitPane);
 		mainPanel.add(BorderLayout.SOUTH, audioControlPanel);
 
@@ -218,6 +294,13 @@ public class Main {
 			}
 		});
 
+		fpsComboBox.addItemListener(new ItemListener() {
+			@Override
+			public void itemStateChanged(ItemEvent e) {
+				outputSequencer.setFPS((String) splitComboBox.getSelectedItem());
+			}
+		});
+
 		lyricsTextArea.getDocument().addDocumentListener(new DocumentListener() {
 			@Override
 			public void removeUpdate(DocumentEvent e) {
@@ -227,6 +310,60 @@ public class Main {
 			@Override
 			public void insertUpdate(DocumentEvent e) {
 				lyricsProcessor.loadLyrics(lyricsTextArea.getText(), (String) splitComboBox.getSelectedItem());
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e) {
+			}
+		});
+
+		widthTextField.getDocument().addDocumentListener(new DocumentListener() {
+			public void setWidth() {
+				int width;
+				try {
+					width = Integer.parseInt(widthTextField.getText());
+
+				} catch (NumberFormatException ex) {
+					width = 1920;
+				}
+				outputSequencer.setWidth(width);
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e) {
+				setWidth();
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e) {
+				setWidth();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e) {
+			}
+		});
+
+		heightTextField.getDocument().addDocumentListener(new DocumentListener() {
+			public void setHeight() {
+				int height;
+				try {
+					height = Integer.parseInt(heightTextField.getText());
+
+				} catch (NumberFormatException ex) {
+					height = 1080;
+				}
+				outputSequencer.setWidth(height);
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e) {
+				setHeight();
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e) {
+				setHeight();
 			}
 
 			@Override
@@ -308,7 +445,7 @@ public class Main {
 
 					try {
 						String outputFile = transcoder.processNonWaveFile(audioFilePath, "mp3");
-						final long length = player.load(outputFile);
+						final long length = player.loadAudio(outputFile);
 
 						lengthTimeStr = "/" + formatMicroseconds(length);
 
@@ -337,6 +474,8 @@ public class Main {
 					System.out.printf("Selected font is: %s%n", dialog.getSelectedFont());
 					lyricsProcessor.loadFont(dialog.getSelectedFont());
 					fontPathField.setText(dialog.getSelectedFont().getName());
+
+					outputSequencer.setFont(dialog.getSelectedFont());
 				}
 			}
 		});
@@ -344,9 +483,58 @@ public class Main {
 		normalColor.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				Color newColor = JColorChooser.showDialog(null, "Choose Background Color", Color.black);
+				Color newColor = JColorChooser.showDialog(null, "Choose normal color", normalColor.getBackground());
 				if (newColor != null) {
 					normalColor.setBackground(newColor);
+					outputSequencer.setNormal(newColor);
+				}
+			}
+		});
+
+		outlineColor.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				Color newColor = JColorChooser.showDialog(null, "Choose normal outline color",
+						outlineColor.getBackground());
+				if (newColor != null) {
+					outlineColor.setBackground(newColor);
+					outputSequencer.setOutline(newColor);
+				}
+			}
+		});
+
+		highlightColor.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				Color newColor = JColorChooser.showDialog(null, "Choose highlight color",
+						highlightColor.getBackground());
+				if (newColor != null) {
+					highlightColor.setBackground(newColor);
+					outputSequencer.setHighlight(newColor);
+				}
+			}
+		});
+
+		highlightOutlineColor.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				Color newColor = JColorChooser.showDialog(null, "Choose highlight outline color",
+						highlightOutlineColor.getBackground());
+				if (newColor != null) {
+					highlightOutlineColor.setBackground(newColor);
+					outputSequencer.setHighlightOutline(newColor);
+				}
+			}
+		});
+
+		backgroundColor.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				Color newColor = JColorChooser.showDialog(null, "Choose background color",
+						backgroundColor.getBackground());
+				if (newColor != null) {
+					backgroundColor.setBackground(newColor);
+					outputSequencer.setBackground(newColor);
 				}
 			}
 		});
