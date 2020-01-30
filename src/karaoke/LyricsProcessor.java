@@ -22,6 +22,9 @@ public class LyricsProcessor {
 	private String[][] lyrics;
 	private long[][] wordTimestamps;
 
+	// End point after the final word in lyrics.
+	private long finalTimestamp;
+
 	private JLabel[][] labels;
 	private JLabel[][] timeLabels;
 
@@ -181,6 +184,7 @@ public class LyricsProcessor {
 		}
 
 		if (wordIndex < 0 || phraseIndex < 0) {
+			finalTimestamp = microseconds;
 			return;
 		}
 
@@ -192,7 +196,7 @@ public class LyricsProcessor {
 
 		clearAllLess(microseconds);
 
-		int[] nextPair = getNextIndexPair(phraseIndex, wordIndex);
+		int[] nextPair = getNextIndexPair(phraseIndex, wordIndex, wordTimestamps);
 		setCurrentIndex(nextPair[0], nextPair[1]);
 	}
 
@@ -222,13 +226,13 @@ public class LyricsProcessor {
 	}
 
 	// Return pair phraseIndex, wordIndex.
-	private int[] getNextIndexPair(int pIndex, int wIndex) {
-		if (wordTimestamps == null || lyrics == null || labels == null) {
-			System.err.println("wordTimestamps, lyrics, or labels is null.");
+	public static int[] getNextIndexPair(int pIndex, int wIndex, long[][] timestamps) {
+		if (timestamps == null) {
+			System.err.println("timestamps is null.");
 			return null;
 		}
-		if (wIndex == wordTimestamps[pIndex].length - 1) {
-			if (pIndex == wordTimestamps.length - 1) {
+		if (wIndex == timestamps[pIndex].length - 1) {
+			if (pIndex == timestamps.length - 1) {
 				return new int[] { -1, -1 };
 			} else {
 				return new int[] { pIndex + 1, 0 };
@@ -282,7 +286,7 @@ public class LyricsProcessor {
 				intersected = true;
 			}
 
-			int[] indexPair = getNextIndexPair(pIndex, wIndex);
+			int[] indexPair = getNextIndexPair(pIndex, wIndex, wordTimestamps);
 			pIndex = indexPair[0];
 			wIndex = indexPair[1];
 		}
@@ -294,5 +298,9 @@ public class LyricsProcessor {
 
 	public long[][] getTimestamps() {
 		return wordTimestamps;
+	}
+
+	public long getFinalTimestamp() {
+		return finalTimestamp;
 	}
 }

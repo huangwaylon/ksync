@@ -38,7 +38,6 @@ public class OutputSequencer {
 
 	public void setFPS(String fps) {
 		this.fps = fps;
-
 		if (fps.equals("30:1")) {
 			framesPerSecond = 30;
 		} else if (fps.equals("60:1")) {
@@ -52,21 +51,6 @@ public class OutputSequencer {
 	}
 
 	public void sequence(LyricsProcessor lyricsProcessor, AudioPlayer player) {
-		long audioLength = player.getLength();
-		System.out.println(audioLength);
-
-		int totalFrames = (int) Math.ceil((audioLength * framesPerSecond) / 1e6);
-
-		int currentPhraseIndex = -1;
-
-		double microsecondsPerFrame = 1.0e6 / framesPerSecond;
-
-		String[][] lyrics = lyricsProcessor.getLyrics();
-		long[][] wordTimestamps = lyricsProcessor.getTimestamps();
-
-		System.out.println("Sequence with audioLength: " + audioLength + " with FPS: " + framesPerSecond
-				+ " with frames: " + totalFrames);
-
 		// Background components.
 		BufferedImage backgroundBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D backgroundGraphics = backgroundBufferedImage.createGraphics();
@@ -87,44 +71,155 @@ public class OutputSequencer {
 		BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics finalGraphics = finalImage.getGraphics();
 
-		// Draw background color.
-		backgroundGraphics.setColor(background);
+		long audioLength = player.getLength();
+		int totalFrames = (int) Math.ceil((audioLength * framesPerSecond) / 1e6);
+
+		int phraseIndex = -1, wordIndex = -1;
+		int nextPhraseIndex = 0, nextWordIndex = 0;
+
+		double microsecondsPerFrame = 1.0e6 / framesPerSecond;
+
+		String[][] lyrics = lyricsProcessor.getLyrics();
+		long[][] wordTimestamps = lyricsProcessor.getTimestamps();
+
+		// Computed for the current phrase.
+		FontMetrics fontMetrics = backgroundGraphics.getFontMetrics();
+		String phrase = "";
+		int spaceWidth = fontMetrics.stringWidth(" ");
+		int wordWidth = 0;
+		int totalWidthSoFar = 0;
+
+		int phraseWidth = spaceWidth;
+		int phraseHeight = fontMetrics.getAscent();
+
+		// Computed for the current word.
+		int widthPerFrame = 0;
+		int frames = 0;
+
+		// Initial next time stamp is that of the first word.
+		long nextTimestamp = wordTimestamps[nextPhraseIndex][nextWordIndex];
+
+		long start = System.currentTimeMillis();
+
+		System.out.println("Sequence with audioLength: " + audioLength + " with FPS: " + framesPerSecond
+				+ " with frames: " + totalFrames);
+
+		System.out.println("nextTimestamp: " + nextTimestamp + " spaceWidth: " + spaceWidth);
 
 		for (int i = 0; i < totalFrames; i++) {
 			System.out.println("Frame number: " + i);
-
 			double totalTimeSoFar = microsecondsPerFrame * i;
 
-			if (currentPhraseIndex < lyrics.length - 1 && totalTimeSoFar >= wordTimestamps[currentPhraseIndex + 1][0]) {
-				currentPhraseIndex += 1;
+			// Check if we've moved onto the next element.
+			if (totalTimeSoFar > nextTimestamp) {
+				int lastP = phraseIndex;
+
+				phraseIndex = nextPhraseIndex;
+				wordIndex = nextWordIndex;
+
+				long currTimestamp = wordTimestamps[phraseIndex][wordIndex];
+
+				// Check to see if we've moved onto a new phrase.
+				if (phraseIndex > lastP) {
+					phrase = String.join(" ", lyrics[phraseIndex]);
+					totalWidthSoFar = 0;
+
+					phraseWidth = fontMetrics.stringWidth(phrase);
+				}
+
+				String currentWord = lyrics[phraseIndex][wordIndex];
+				wordWidth = fontMetrics.stringWidth(currentWord);
+				totalWidthSoFar += wordWidth + (wordIndex == 0 ? 0 : spaceWidth);
+
+				int[] nextPair = getNextPair(phraseIndex, wordIndex, wordTimestamps);
+				nextPhraseIndex = nextPair[0];
+				nextWordIndex = nextPair[1];
+
+				// If there is no phrase and word index available, use the final time stamp.
+				if (nextPhraseIndex < 0 || nextWordIndex < 0) {
+					long finalTimestamp = lyricsProcessor.getFinalTimestamp();
+					if (finalTimestamp < 0) {
+						nextTimestamp = player.getLength();
+					} else {
+						nextTimestamp = finalTimestamp;
+					}
+				} else {
+					nextTimestamp = wordTimestamps[nextPhraseIndex][nextWordIndex];
+				}
+
+				long timeDiff = nextTimestamp - currTimestamp;
+				widthPerFrame = (int) Math.round(wordWidth / (timeDiff / microsecondsPerFrame));
+
+				// Reset frames for this word.
+				frames = 0;
+
+				System.out.println("currentWord: " + currentWord + " totalWidthSoFar: " + totalWidthSoFar
+						+ " widthPerFrame: " + widthPerFrame);
 			}
 
-			String phrase = currentPhraseIndex < 0 ? "" : String.join(" ", lyrics[currentPhraseIndex]);
-			genImage(i, phrase, backgroundGraphics, foregroundGraphics, finalGraphics, backgroundBufferedImage,
-					foregroundBufferedImage, finalImage);
-		}
+			int width = widthPerFrame * frames + totalWidthSoFar - wordWidth;
+			if (width <= 0) {
+				width = 1;
+			}
 
+			genImage(i, phrase, backgroundGraphics, foregroundGraphics, finalGraphics, backgroundBufferedImage,
+					foregroundBufferedImage, finalImage, phraseWidth, phraseHeight, width);
+
+			frames += 1;
+		}
 		System.out.println("Done sequencing!");
+		System.out.println("Total time: " + (System.currentTimeMillis() - start) / 1000.0);
+	}
+
+	// Keep searching for a non-negative time stamp until one is found, else return
+	// -1, -1.
+	private int[] getNextPair(int pIndex, int wIndex, long[][] wordTimestamps) {
+		while (true) {
+			int[] nextPair = LyricsProcessor.getNextIndexPair(pIndex, wIndex, wordTimestamps);
+
+			if (pIndex < 0 || wIndex < 0) {
+				return nextPair;
+			}
+
+			long timestamp = wordTimestamps[pIndex][wIndex];
+			if (timestamp >= 0) {
+				return nextPair;
+			}
+
+			pIndex = nextPair[0];
+			wIndex = nextPair[1];
+		}
 	}
 
 	private void genImage(int imageNum, String phrase, Graphics2D backgroundGraphics, Graphics2D foregroundGraphics,
 			Graphics finalGraphics, BufferedImage backgroundBufferedImage, BufferedImage foregroundBufferedImage,
-			BufferedImage finalImage) {
+			BufferedImage finalImage, int phraseWidth, int phraseHeight, int phraseFractionWidth) {
+		// Clear foreground image.
+		foregroundGraphics.setBackground(new Color(255, 255, 255, 0));
+		foregroundGraphics.clearRect(0, 0, width, height);
+
+		// Fill background image with solid color.
+		backgroundGraphics.setPaint(background);
 		backgroundGraphics.fillRect(0, 0, width, height);
 		backgroundGraphics.setPaint(normal);
 
-		FontMetrics fontMetrics = backgroundGraphics.getFontMetrics();
-		int stringWidth = fontMetrics.stringWidth(phrase);
-		int stringHeight = fontMetrics.getAscent();
+		// Align to center.
+		float x = (width - phraseWidth) / 2;
+		float y = height / 2 + phraseHeight / 4;
 
-		backgroundGraphics.drawString(phrase, (width - stringWidth) / 2, height / 2 + stringHeight / 4);
-		foregroundGraphics.drawString(phrase, (width - stringWidth) / 2, height / 2 + stringHeight / 4);
+		// Draw the phrase for both layers.
+		backgroundGraphics.drawString(phrase, x, y);
+		foregroundGraphics.drawString(phrase, x, y);
 
-		BufferedImage foregroundSubImage = foregroundBufferedImage.getSubimage(0, 0, 900, 1080);
+		// Cut the foreground slice.
+		BufferedImage foregroundSubImage = foregroundBufferedImage.getSubimage((int) x, (int) y - phraseHeight,
+				phraseFractionWidth, phraseHeight * 2);
 
+		// Combine the two layers.
 		finalGraphics.drawImage(backgroundBufferedImage, 0, 0, null);
-		finalGraphics.drawImage(foregroundSubImage, 0, 0, null);
+		finalGraphics.drawImage(foregroundSubImage, (int) x, (int) y - phraseHeight, null);
 
+		System.out.println("x: " + x + " y: " + y + " phraseFractionWidth: " + phraseFractionWidth);
 		try {
 			ImageIO.write(finalImage, "PNG",
 					new File(String.format("/Users/waylonh/Downloads/test/image%08d.png", imageNum)));

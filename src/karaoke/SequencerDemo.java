@@ -36,7 +36,7 @@ public class SequencerDemo {
 //			return;
 //		}
 
-		int maxFrames = 1000;
+		int maxFrames = 121;
 		String fpsRaw = "25:1";
 		String outDir = new File("/Users/waylonh/Downloads/test/image%08d.png").getAbsolutePath();
 		FileChannelWrapper out = null;

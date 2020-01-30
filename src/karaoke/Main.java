@@ -166,6 +166,7 @@ public class Main {
 		fpsPanel.setLayout(new BoxLayout(fpsPanel, BoxLayout.LINE_AXIS));
 		String[] fpsOptions = new String[] { "24:1", "25:1", "30:1", "60:1" };
 		JComboBox<String> fpsComboBox = new JComboBox<String>(fpsOptions);
+		fpsComboBox.setSelectedIndex(2);
 		fpsPanel.add(new JLabel("FPS"));
 		fpsPanel.add(fpsComboBox);
 
