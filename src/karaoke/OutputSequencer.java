@@ -8,8 +8,18 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.imageio.ImageIO;
+
+import org.jcodec.api.awt.AWTSequenceEncoder;
+import org.jcodec.common.io.FileChannelWrapper;
+import org.jcodec.common.io.NIOUtils;
+import org.jcodec.common.model.Rational;
+import org.jcodec.common.tools.MainUtils;
 
 public class OutputSequencer {
 	private int width = 1920, height = 1080;
@@ -50,12 +60,31 @@ public class OutputSequencer {
 		System.out.println("Set FPS: " + fps + " framesPerSecond: " + framesPerSecond);
 	}
 
-	public void sequence(LyricsProcessor lyricsProcessor, AudioPlayer player) {
+	public void export(LyricsProcessor lyricsProcessor, AudioPlayer player, SequencerListener listener) {
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		executor.submit(() -> {
+			System.out.println("starting thread " + Thread.currentThread().getName());
+			try {
+				sequence(lyricsProcessor, player, listener);
+			} catch (IOException ex) {
+				ex.printStackTrace();
+			}
+			listener.done();
+		});
+	}
+
+	public void sequence(LyricsProcessor lyricsProcessor, AudioPlayer player, SequencerListener listener)
+			throws IOException {
+		FileChannelWrapper out = null;
+		out = NIOUtils.writableChannel(MainUtils.tildeExpand("/Users/waylonh/Downloads/out.mp4"));
+		AWTSequenceEncoder encoder = new AWTSequenceEncoder(out, Rational.parse(fps));
+
+		RenderingHints renderingHints = new RenderingHints(RenderingHints.KEY_TEXT_ANTIALIASING,
+				RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
 		// Background components.
 		BufferedImage backgroundBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D backgroundGraphics = backgroundBufferedImage.createGraphics();
-		RenderingHints renderingHints = new RenderingHints(RenderingHints.KEY_TEXT_ANTIALIASING,
-				RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 		backgroundGraphics.setRenderingHints(renderingHints);
 		backgroundGraphics.setFont(font);
 
@@ -63,9 +92,15 @@ public class OutputSequencer {
 		BufferedImage foregroundBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D foregroundGraphics = foregroundBufferedImage.createGraphics();
 		foregroundGraphics.setRenderingHints(renderingHints);
-
 		foregroundGraphics.setFont(font);
 		foregroundGraphics.setPaint(highlight);
+
+		// Second line components
+		BufferedImage secondBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D secondGraphics = secondBufferedImage.createGraphics();
+		secondGraphics.setRenderingHints(renderingHints);
+		secondGraphics.setFont(font);
+		secondGraphics.setPaint(normal);
 
 		// Final image components.
 		BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -85,6 +120,12 @@ public class OutputSequencer {
 		// Computed for the current phrase.
 		FontMetrics fontMetrics = backgroundGraphics.getFontMetrics();
 		String phrase = "";
+		String nextPhrase = "";
+
+		if (lyrics.length >= 1) {
+			nextPhrase = String.join(" ", lyrics[0]);
+		}
+
 		int spaceWidth = fontMetrics.stringWidth(" ");
 		int wordWidth = 0;
 		int totalWidthSoFar = 0;
@@ -112,6 +153,14 @@ public class OutputSequencer {
 
 			// Check if we've moved onto the next element.
 			if (totalTimeSoFar > nextTimestamp) {
+				// Check if we've reached the end of our lyrics lists.
+				if (nextPhraseIndex < 0 || nextWordIndex < 0) {
+					phrase = "";
+					phraseWidth = 1;
+
+					nextTimestamp = player.getLength();
+					break;
+				}
 				int lastP = phraseIndex;
 
 				phraseIndex = nextPhraseIndex;
@@ -131,9 +180,11 @@ public class OutputSequencer {
 				wordWidth = fontMetrics.stringWidth(currentWord);
 				totalWidthSoFar += wordWidth + (wordIndex == 0 ? 0 : spaceWidth);
 
+				System.out.print("get next pair");
 				int[] nextPair = getNextPair(phraseIndex, wordIndex, wordTimestamps);
 				nextPhraseIndex = nextPair[0];
 				nextWordIndex = nextPair[1];
+				System.out.println(" done");
 
 				// If there is no phrase and word index available, use the final time stamp.
 				if (nextPhraseIndex < 0 || nextWordIndex < 0) {
@@ -145,6 +196,12 @@ public class OutputSequencer {
 					}
 				} else {
 					nextTimestamp = wordTimestamps[nextPhraseIndex][nextWordIndex];
+				}
+
+				if (phraseIndex + 1 < lyrics.length) {
+					nextPhrase = String.join(" ", lyrics[phraseIndex + 1]);
+				} else {
+					nextPhrase = "";
 				}
 
 				long timeDiff = nextTimestamp - currTimestamp;
@@ -162,13 +219,20 @@ public class OutputSequencer {
 				width = 1;
 			}
 
-			genImage(i, phrase, backgroundGraphics, foregroundGraphics, finalGraphics, backgroundBufferedImage,
-					foregroundBufferedImage, finalImage, phraseWidth, phraseHeight, width);
+			genImage(i, phrase, nextPhrase, backgroundGraphics, foregroundGraphics, secondGraphics, finalGraphics,
+					backgroundBufferedImage, foregroundBufferedImage, secondBufferedImage, finalImage, phraseWidth,
+					phraseHeight, width);
+			encoder.encodeImage(finalImage);
 
 			frames += 1;
+
+			listener.setProgress((double) i / totalFrames);
 		}
 		System.out.println("Done sequencing!");
 		System.out.println("Total time: " + (System.currentTimeMillis() - start) / 1000.0);
+
+		encoder.finish();
+		NIOUtils.closeQuietly(out);
 	}
 
 	// Keep searching for a non-negative time stamp until one is found, else return
@@ -191,12 +255,18 @@ public class OutputSequencer {
 		}
 	}
 
-	private void genImage(int imageNum, String phrase, Graphics2D backgroundGraphics, Graphics2D foregroundGraphics,
-			Graphics finalGraphics, BufferedImage backgroundBufferedImage, BufferedImage foregroundBufferedImage,
-			BufferedImage finalImage, int phraseWidth, int phraseHeight, int phraseFractionWidth) {
+	private void genImage(int imageNum, String phrase, String nextPhrase, Graphics2D backgroundGraphics,
+			Graphics2D foregroundGraphics, Graphics2D secondGraphics, Graphics finalGraphics,
+			BufferedImage backgroundBufferedImage, BufferedImage foregroundBufferedImage,
+			BufferedImage secondBufferedImage, BufferedImage finalImage, int phraseWidth, int phraseHeight,
+			int phraseFractionWidth) {
 		// Clear foreground image.
 		foregroundGraphics.setBackground(new Color(255, 255, 255, 0));
 		foregroundGraphics.clearRect(0, 0, width, height);
+
+		// Clear second line image.
+		secondGraphics.setBackground(new Color(255, 255, 255, 0));
+		secondGraphics.clearRect(0, 0, width, height);
 
 		// Fill background image with solid color.
 		backgroundGraphics.setPaint(background);
@@ -210,6 +280,7 @@ public class OutputSequencer {
 		// Draw the phrase for both layers.
 		backgroundGraphics.drawString(phrase, x, y);
 		foregroundGraphics.drawString(phrase, x, y);
+		secondGraphics.drawString(nextPhrase, x, (int) (y + 1.5 * phraseHeight));
 
 		// Cut the foreground slice.
 		BufferedImage foregroundSubImage = foregroundBufferedImage.getSubimage((int) x, (int) y - phraseHeight,
@@ -218,14 +289,16 @@ public class OutputSequencer {
 		// Combine the two layers.
 		finalGraphics.drawImage(backgroundBufferedImage, 0, 0, null);
 		finalGraphics.drawImage(foregroundSubImage, (int) x, (int) y - phraseHeight, null);
+		finalGraphics.drawImage(secondBufferedImage, 0, 0, null);
 
 		System.out.println("x: " + x + " y: " + y + " phraseFractionWidth: " + phraseFractionWidth);
-		try {
-			ImageIO.write(finalImage, "PNG",
-					new File(String.format("/Users/waylonh/Downloads/test/image%08d.png", imageNum)));
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+
+//		try {
+//			ImageIO.write(finalImage, "PNG",
+//					new File(String.format("/Users/waylonh/Downloads/test/test%08d.png", imageNum)));
+//		} catch (IOException ie) {
+//			ie.printStackTrace();
+//		}
 	}
 
 	public void setNormal(Color normal) {
@@ -246,5 +319,11 @@ public class OutputSequencer {
 
 	public void setBackground(Color background) {
 		this.background = background;
+	}
+
+	public interface SequencerListener {
+		public void done();
+
+		public void setProgress(double progress);
 	}
 }

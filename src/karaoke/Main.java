@@ -20,6 +20,7 @@ import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
 import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
+import karaoke.OutputSequencer.SequencerListener;
 import karaoke.TimerService.TimerListener;
 import karaoke.WaveFormPane.WaveListener;
 
@@ -66,6 +67,17 @@ public class Main {
 
 		frame.setMinimumSize(minFrameSize);
 
+		JDialog progressDialog = new JDialog(frame, "Export progress", true);
+		JProgressBar dpb = new JProgressBar(0, 100);
+		dpb.setIndeterminate(false);
+		progressDialog.add(BorderLayout.CENTER, dpb);
+		progressDialog.add(BorderLayout.NORTH, new JLabel("Exporting..."));
+		progressDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+		progressDialog.setSize(300, 75);
+		progressDialog.setLocationRelativeTo(frame);
+
+		SequencerProgressChecker spc = new SequencerProgressChecker(progressDialog, dpb);
+
 		// Creating the MenuBar and adding components.
 		JMenuBar menuBar = new JMenuBar();
 		JMenu m1 = new JMenu("File");
@@ -73,15 +85,31 @@ public class Main {
 		menuBar.add(m1);
 		menuBar.add(m2);
 
-		JMenuItem m11 = new JMenuItem("Open Project");
-		JMenuItem m22 = new JMenuItem("Save Project");
+		JMenuItem m11 = new JMenuItem(new AbstractAction("Open Project") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				System.out.println("Open Project");
+			}
+		});
+		JMenuItem m22 = new JMenuItem(new AbstractAction("Save Project") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				System.out.println("Save Project");
+				progressDialog.setVisible(false);
+			}
+		});
 		JMenuItem m33 = new JMenuItem(new AbstractAction("Export") {
 			private static final long serialVersionUID = 1L;
 
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				System.out.println("Export");
-				outputSequencer.sequence(lyricsProcessor, player);
+				outputSequencer.export(lyricsProcessor, player, spc);
+				progressDialog.setVisible(true);
 			}
 		});
 
@@ -250,11 +278,25 @@ public class Main {
 		projectPanel.add(projectOptionsPanel);
 		projectPanel.add(fontOptionsPanel);
 
+		JPanel locationPanel = new JPanel();
+		locationPanel.setLayout(new GridLayout(2, 2));
+		locationPanel.add(new JLabel("Alignment"));
+		String[] locationOptions = new String[] { "Top", "Middle", "Bottom" };
+		JComboBox<String> locationComboBox = new JComboBox<String>(locationOptions);
+		locationComboBox.setSelectedIndex(2);
+		locationPanel.add(locationComboBox);
+		locationPanel.add(new JLabel("Number of lines"));
+		String[] numLinesOptions = new String[] { "1", "2" };
+		JComboBox<String> numLinesComboBox = new JComboBox<String>(numLinesOptions);
+		numLinesComboBox.setSelectedIndex(1);
+		locationPanel.add(numLinesComboBox);
+
 		JPanel topPanel = new JPanel();
-		topPanel.setLayout(new GridLayout(0, 3));
+		topPanel.setLayout(new GridLayout(0, 4, 5, 0));
 		topPanel.add(projectPanel);
 		topPanel.add(dimensionsPanel);
 		topPanel.add(colorOptionsPanel);
+		topPanel.add(locationPanel);
 
 		JPanel audioControlPanel = new JPanel();
 		audioControlPanel.setLayout(new BoxLayout(audioControlPanel, BoxLayout.PAGE_AXIS));
@@ -603,4 +645,24 @@ public class Main {
 		}
 	}
 
+	private static class SequencerProgressChecker implements SequencerListener {
+		private JDialog dialog;
+		private JProgressBar progressBar;
+
+		public SequencerProgressChecker(JDialog dialog, JProgressBar progressBar) {
+			this.dialog = dialog;
+			this.progressBar = progressBar;
+		}
+
+		@Override
+		public void done() {
+			System.out.println("SequencerProgressChecker done!");
+			dialog.setVisible(false);
+		}
+
+		@Override
+		public void setProgress(double progress) {
+			progressBar.setValue((int) (100 * progress));
+		}
+	}
 }
