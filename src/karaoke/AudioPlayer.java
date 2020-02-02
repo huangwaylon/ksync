@@ -46,20 +46,17 @@ public class AudioPlayer implements LineListener, IndexSelectListener {
 		return -1;
 	}
 
-	public void play() {
+	public void playOrPause() {
 		if (audioClip == null) {
 			return;
 		}
-		System.out.println("Audio player play.");
-		audioClip.start();
-	}
-
-	public void pause() {
-		if (audioClip == null) {
-			return;
+		if (audioClip.isRunning()) {
+			System.out.println("Audio player pause.");
+			audioClip.stop();
+		} else {
+			System.out.println("Audio player play.");
+			audioClip.start();
 		}
-		System.out.println("Audio player pause.");
-		audioClip.stop();
 	}
 
 	public void stop() {

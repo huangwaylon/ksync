@@ -1,23 +1,34 @@
 package karaoke;
 
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.stream.Stream;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
+import org.apache.log4j.Logger;
+
 public class LyricsProcessor {
-	private final JPanel displayPanel;
-	private Font font;
+	public static Logger log = Logger.getLogger(Main.class);
+
+	private final int displayFontSize = 24;
+	private final int outputFontSize = 72;
 
 	private final Font timingFont = new Font("SansSerif", Font.PLAIN, 8);
+	// Font used to display lyrics in editor.
+	private Font displayFont = new Font("Serif", Font.PLAIN, displayFontSize);
+	// Font used in final output.
+	private Font outputFont = new Font("Serif", Font.PLAIN, outputFontSize);
+
+	private final JPanel displayPanel;
 
 	private String[][] lyrics;
 	private long[][] wordTimestamps;
@@ -30,18 +41,18 @@ public class LyricsProcessor {
 
 	private int phraseIndex, wordIndex;
 
-	private boolean noWordsSet;
-
 	private IndexSelectListener indexSelectListener;
 
-	public LyricsProcessor(JPanel displayPanel, IndexSelectListener indexSelectListener) {
-		this.displayPanel = displayPanel;
+	public LyricsProcessor(IndexSelectListener indexSelectListener) {
 		this.indexSelectListener = indexSelectListener;
 
-		this.font = new Font("Serif", Font.PLAIN, 20);
+		displayPanel = new JPanel();
+		displayPanel.setLayout(new BoxLayout(displayPanel, BoxLayout.PAGE_AXIS));
 	}
 
 	public void loadLyrics(String lyricsStr, String splitOption) {
+		log.debug("Lyrics processor loading lyrics with split option: " + splitOption);
+
 		String[] phrases = lyricsStr.split("[\\r\\n]+");
 
 		lyrics = new String[phrases.length][];
@@ -49,15 +60,18 @@ public class LyricsProcessor {
 		labels = new JLabel[phrases.length][];
 		timeLabels = new JLabel[phrases.length][];
 
+		String[] singleElement = new String[] { "" };
 		for (int i = 0; i < phrases.length; i++) {
+			String[] tempArray;
 			if (splitOption.equals("Word")) {
-				lyrics[i] = phrases[i].split("\\s+");
+				tempArray = phrases[i].split("\\s+");
 			} else if (splitOption.equals("Phrase")) {
-				lyrics[i] = new String[] { phrases[i] };
+				tempArray = new String[] { phrases[i] };
 			} else {
 				String p = phrases[i].replaceAll("\\s+", "");
-				lyrics[i] = p.split("");
+				tempArray = p.split("");
 			}
+			lyrics[i] = Stream.concat(Arrays.stream(tempArray), Arrays.stream(singleElement)).toArray(String[]::new);
 
 			wordTimestamps[i] = new long[lyrics[i].length];
 			labels[i] = new JLabel[lyrics[i].length];
@@ -69,12 +83,18 @@ public class LyricsProcessor {
 	}
 
 	public void loadFont(Font font) {
-		this.font = font;
+		log.debug("Lyrics processor loading font: " + font.getName());
+
+		this.outputFont = font;
+		this.displayFont = font.deriveFont((float) displayFontSize);
 		setUpPanel();
 	}
 
 	private void setUpPanel() {
+		log.debug("Lyrics processor setting up editor panel.");
+
 		if (lyrics == null) {
+			log.warn("Lyrics processor did not set up editor panel because lyrics was null.");
 			return;
 		}
 
@@ -90,7 +110,7 @@ public class LyricsProcessor {
 				wordPanel.setLayout(new BoxLayout(wordPanel, BoxLayout.PAGE_AXIS));
 
 				JLabel word = new JLabel(phraseArr[j]);
-				word.setFont(font);
+				word.setFont(displayFont);
 				word.setOpaque(true);
 
 				JLabel wordTiming = new JLabel("");
@@ -177,7 +197,14 @@ public class LyricsProcessor {
 		labels[phraseIndex][wordIndex].setBackground(Color.YELLOW);
 	}
 
-	public void setTimestampForCurrentWord(long microseconds) {
+	public void setTimestampForCurrentWordAndMoveToNext(long microseconds) {
+		setTimestampForCurrentWord(microseconds);
+
+		int[] nextPair = getNextIndexPair(phraseIndex, wordIndex, wordTimestamps);
+		setCurrentIndex(nextPair[0], nextPair[1]);
+	}
+
+	private void setTimestampForCurrentWord(long microseconds) {
 		if (wordTimestamps == null || lyrics == null || labels == null) {
 			System.err.println("wordTimestamps, lyrics, or labels is null.");
 			return;
@@ -188,21 +215,19 @@ public class LyricsProcessor {
 			return;
 		}
 
-		noWordsSet = false;
-
 		wordTimestamps[phraseIndex][wordIndex] = microseconds;
+
 		labels[phraseIndex][wordIndex].setBackground(Color.LIGHT_GRAY);
 		timeLabels[phraseIndex][wordIndex].setText(formatMicroseconds(microseconds));
 
 		clearAllLess(microseconds);
-
-		int[] nextPair = getNextIndexPair(phraseIndex, wordIndex, wordTimestamps);
-		setCurrentIndex(nextPair[0], nextPair[1]);
 	}
 
 	public void resetAllSyncMarkers() {
+		log.debug("Lyrics processor resetting all synchronization markers.");
+
 		if (wordTimestamps == null || lyrics == null || labels == null) {
-			System.err.println("wordTimestamps, lyrics, or labels is null.");
+			log.warn("Lyrics processor could not reset all synchronization markers because lyrics was null");
 			return;
 		}
 
@@ -217,12 +242,53 @@ public class LyricsProcessor {
 
 		phraseIndex = 0;
 		wordIndex = 0;
-
-		noWordsSet = true;
 	}
 
-	private void updateCurrentWord(int pIndex, int wIndex) {
+	public boolean nudge(String amount, boolean all, boolean left) {
+		log.debug("Lyrics processor nudging by " + amount + " milliseconds, all: " + all + " left: " + left);
 
+		if (wordTimestamps == null || lyrics == null || labels == null) {
+			log.warn("Lyrics processor can't nudge because lyrics is null.");
+			return false;
+		}
+
+		int nudgeAmount;
+		try {
+			nudgeAmount = Integer.parseInt(amount);
+		} catch (NumberFormatException ex) {
+			ex.printStackTrace();
+			return false;
+		}
+		if (nudgeAmount < 0) {
+			return false;
+		}
+
+		nudgeAmount *= (left ? -1 : 1);
+		// Milliseconds to microseconds.
+		nudgeAmount *= 1000;
+
+		if (all) {
+			// Update the time stamp value of just a single word.
+			for (int i = 0; i < wordTimestamps.length; i++) {
+				for (int j = 0; j < wordTimestamps[i].length; j++) {
+					if (wordTimestamps[i][j] >= 0) {
+						long newTime = wordTimestamps[i][j] + nudgeAmount;
+
+						wordTimestamps[i][j] = newTime;
+						timeLabels[i][j].setText(formatMicroseconds(newTime));
+					}
+				}
+			}
+		} else {
+			if (phraseIndex < 0 || wordIndex < 0) {
+				return false;
+			}
+			// Update the time stamp value of just a single word.
+			long newTime = wordTimestamps[phraseIndex][wordIndex] + nudgeAmount;
+			setTimestampForCurrentWord(newTime);
+			setCurrentIndex(phraseIndex, wordIndex);
+		}
+		return false;
 	}
 
 	// Return pair phraseIndex, wordIndex.
@@ -253,8 +319,12 @@ public class LyricsProcessor {
 		return String.format("%d:%02d:%03d", d.toMinutesPart(), d.toSecondsPart(), d.toMillisPart());
 	}
 
-	public Font getSelectedFont() {
-		return font;
+	public Font getDisplayFont() {
+		return displayFont;
+	}
+
+	public Font getOutputFont() {
+		return outputFont;
 	}
 
 	public interface IndexSelectListener {
@@ -302,5 +372,9 @@ public class LyricsProcessor {
 
 	public long getFinalTimestamp() {
 		return finalTimestamp;
+	}
+
+	public JPanel getDisplayPanel() {
+		return displayPanel;
 	}
 }

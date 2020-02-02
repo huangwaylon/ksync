@@ -1,8 +1,6 @@
 package karaoke;
 
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -10,10 +8,10 @@ import java.awt.*;
 
 import java.awt.event.*;
 import java.time.Duration;
-import java.util.Hashtable;
 
 import javax.swing.filechooser.*;
 
+import org.apache.log4j.Logger;
 import org.drjekyll.fontchooser.FontDialog;
 
 import javafx.application.Platform;
@@ -25,7 +23,9 @@ import karaoke.TimerService.TimerListener;
 import karaoke.WaveFormPane.WaveListener;
 
 public class Main {
-	private static JPanel displayPanel = new JPanel();
+	public static Logger log = Logger.getLogger(Main.class);
+
+	private static final int DIALOG_PADDING = 10;
 
 	private static JTextField pathField;
 	private static JLabel playbackTimeLabel;
@@ -44,11 +44,13 @@ public class Main {
 	private static final IntervalUpdater intervalUpdater = new IntervalUpdater();
 	private static final TimerService timerService = new TimerService(intervalUpdater);
 
-	private static final LyricsProcessor lyricsProcessor = new LyricsProcessor(displayPanel, player);
+	private static final LyricsProcessor lyricsProcessor = new LyricsProcessor(player);
 
 	private static final OutputSequencer outputSequencer = new OutputSequencer();
 
 	public static void main(String args[]) {
+		log.debug("Starting karaoke sync program.");
+
 		SwingUtilities.invokeLater(new Runnable() {
 			@Override
 			public void run() {
@@ -58,98 +60,25 @@ public class Main {
 	}
 
 	private static void initAndShowGUI() {
-		JFrame frame = new JFrame("Karaoke Sync");
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		frame.setSize(1024, 720);
+		log.debug("Initializing and showing GUI.");
 
 		Dimension minFrameSize = new Dimension(1024, 700);
-		Dimension minSize = new Dimension(100, 50);
+		Dimension minSize = new Dimension(150, 50);
 
+		JFrame frame = new JFrame("Karaoke Sync");
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.setMinimumSize(minFrameSize);
+		frame.setSize(1024, 720);
 
-		JDialog progressDialog = new JDialog(frame, "Export progress", true);
-		JProgressBar dpb = new JProgressBar(0, 100);
-		dpb.setIndeterminate(false);
-		progressDialog.add(BorderLayout.CENTER, dpb);
-		progressDialog.add(BorderLayout.NORTH, new JLabel("Exporting..."));
-		progressDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-		progressDialog.setSize(300, 75);
-		progressDialog.setLocationRelativeTo(frame);
-
-		SequencerProgressChecker spc = new SequencerProgressChecker(progressDialog, dpb);
-
-		// Creating the MenuBar and adding components.
-		JMenuBar menuBar = new JMenuBar();
-		JMenu m1 = new JMenu("File");
-		JMenu m2 = new JMenu("Help");
-		menuBar.add(m1);
-		menuBar.add(m2);
-
-		JMenuItem m11 = new JMenuItem(new AbstractAction("Open Project") {
-			private static final long serialVersionUID = 1L;
-
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				System.out.println("Open Project");
-			}
-		});
-		JMenuItem m22 = new JMenuItem(new AbstractAction("Save Project") {
-			private static final long serialVersionUID = 1L;
-
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				System.out.println("Save Project");
-				progressDialog.setVisible(false);
-			}
-		});
-		JMenuItem m33 = new JMenuItem(new AbstractAction("Export") {
-			private static final long serialVersionUID = 1L;
-
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				System.out.println("Export");
-				outputSequencer.export(lyricsProcessor, player, spc);
-				progressDialog.setVisible(true);
-			}
-		});
-
-		m1.add(m11);
-		m1.add(m22);
-		m1.add(m33);
-
-		JPanel mainPanel = new JPanel();
-		mainPanel.setLayout(new BorderLayout());
-
-		JButton play = new JButton("Play");
-		JButton stop = new JButton("Stop");
-		JButton pause = new JButton("Pause");
-		JButton set = new JButton("Set");
-		JButton resetAll = new JButton("Reset All");
-		JButton preview = new JButton("Preview");
-
-		playbackTimeLabel = new JLabel("0:00/0:00");
-
-		JSlider tempoSlider = new JSlider(JSlider.HORIZONTAL, 5, 20, 10);
-		tempoSlider.setMajorTickSpacing(5);
-		tempoSlider.setMinorTickSpacing(1);
-		tempoSlider.setPaintTicks(true);
-		tempoSlider.setPaintLabels(true);
-
-		Hashtable<Integer, JLabel> labels = new Hashtable<>();
-		labels.put(5, new JLabel("0.5"));
-		labels.put(10, new JLabel("1"));
-		labels.put(15, new JLabel("1.5"));
-		labels.put(20, new JLabel("2.0"));
-		tempoSlider.setLabelTable(labels);
-
-		JPanel lyricsTopPanel = new JPanel();
-		lyricsTopPanel.setLayout(new BoxLayout(lyricsTopPanel, BoxLayout.LINE_AXIS));
+		// Lyrics options panel.
+		JPanel lyricsOptPanel = new JPanel();
+		lyricsOptPanel.setLayout(new BoxLayout(lyricsOptPanel, BoxLayout.LINE_AXIS));
 		JLabel lyricsLabel = new JLabel("Lyrics");
 		String[] splitOptions = new String[] { "Word", "Character", "Phrase" };
 		JComboBox<String> splitComboBox = new JComboBox<String>(splitOptions);
-		lyricsTopPanel.add(lyricsLabel);
-		lyricsTopPanel.add(Box.createHorizontalStrut(10));
-		lyricsTopPanel.add(splitComboBox);
+		lyricsOptPanel.add(lyricsLabel);
+		lyricsOptPanel.add(splitComboBox);
+		lyricsOptPanel.setMaximumSize(new Dimension(200, 80));
 
 		JTextArea lyricsTextArea = new JTextArea();
 		lyricsTextArea.setColumns(40);
@@ -160,312 +89,93 @@ public class Main {
 		lyricsScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
 		lyricsScrollPane.setPreferredSize(new Dimension(250, 250));
 
-		displayPanel.setLayout(new BoxLayout(displayPanel, BoxLayout.PAGE_AXIS));
-
-		JScrollPane displayScrollPane = new JScrollPane(displayPanel);
-		displayScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-		displayScrollPane.setPreferredSize(new Dimension(250, 250));
-		displayScrollPane.getVerticalScrollBar().setUnitIncrement(16);
-
 		JPanel lyricsInputPanel = new JPanel();
 		lyricsInputPanel.setLayout(new BoxLayout(lyricsInputPanel, BoxLayout.PAGE_AXIS));
 		lyricsInputPanel.add(lyricsScrollPane);
 		lyricsInputPanel.add(Box.createVerticalStrut(5));
-		lyricsInputPanel.add(lyricsTopPanel);
+		lyricsInputPanel.add(lyricsOptPanel);
 		lyricsInputPanel.add(Box.createVerticalStrut(5));
+
+		// Lyrics editor display panel.
+		JScrollPane displayScrollPane = new JScrollPane(lyricsProcessor.getDisplayPanel());
+		displayScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+		displayScrollPane.setPreferredSize(new Dimension(250, 250));
+		displayScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, lyricsInputPanel, displayScrollPane);
 		splitPane.setContinuousLayout(true);
 
-		JTextField widthTextField = new JTextField("1920");
-		JTextField heightTextField = new JTextField("1080");
-
-		JPanel widthPanel = new JPanel();
-		widthPanel.setLayout(new BoxLayout(widthPanel, BoxLayout.LINE_AXIS));
-		widthPanel.add(new JLabel("Width"));
-		widthPanel.add(widthTextField);
-
-		JPanel heightPanel = new JPanel();
-		heightPanel.setLayout(new BoxLayout(heightPanel, BoxLayout.LINE_AXIS));
-		heightPanel.add(new JLabel("Height"));
-		heightPanel.add(heightTextField);
-
-		JPanel fpsPanel = new JPanel();
-		fpsPanel.setLayout(new BoxLayout(fpsPanel, BoxLayout.LINE_AXIS));
-		String[] fpsOptions = new String[] { "24:1", "25:1", "30:1", "60:1" };
-		JComboBox<String> fpsComboBox = new JComboBox<String>(fpsOptions);
-		fpsComboBox.setSelectedIndex(2);
-		fpsPanel.add(new JLabel("FPS"));
-		fpsPanel.add(fpsComboBox);
-
-		JPanel dimensionsPanel = new JPanel();
-		dimensionsPanel.setLayout(new BoxLayout(dimensionsPanel, BoxLayout.PAGE_AXIS));
-		dimensionsPanel.add(widthPanel);
-		dimensionsPanel.add(heightPanel);
-		dimensionsPanel.add(fpsPanel);
-
-		JButton browseSong = new JButton("Browse Song");
-		JLabel pathLabel = new JLabel("Path");
-		pathField = new JTextField("");
-		pathField.setMinimumSize(new Dimension(20, 12));
+		// Top pane for displaying audio path.
+		pathField = new JTextField("File > Import MP3");
+		pathField.setEditable(false);
 
 		JPanel projectOptionsPanel = new JPanel();
 		projectOptionsPanel.setLayout(new BoxLayout(projectOptionsPanel, BoxLayout.LINE_AXIS));
-		projectOptionsPanel.add(browseSong);
-		projectOptionsPanel.add(pathLabel);
+		projectOptionsPanel.add(new JLabel("Audio File Path:"));
 		projectOptionsPanel.add(pathField);
 
-		JButton browseFont = new JButton("Browse Font");
-		JLabel fontPathLabel = new JLabel("Font");
-		JTextField fontPathField = new JTextField("");
-		fontPathField.setMinimumSize(new Dimension(20, 12));
-
-		JPanel fontOptionsPanel = new JPanel();
-		fontOptionsPanel.setLayout(new BoxLayout(fontOptionsPanel, BoxLayout.LINE_AXIS));
-		fontOptionsPanel.add(browseFont);
-		fontOptionsPanel.add(fontPathLabel);
-		fontOptionsPanel.add(fontPathField);
-
-		JPanel colorOptionsPanel = new JPanel();
-		colorOptionsPanel.setLayout(new BoxLayout(colorOptionsPanel, BoxLayout.PAGE_AXIS));
-		JPanel colorInsidePanel = new JPanel();
-		colorInsidePanel.setLayout(new GridLayout(3, 2));
-		JButton normalColor = new JButton("Normal");
-		JButton outlineColor = new JButton("Normal Outline");
-		JButton highlightColor = new JButton("Highlight");
-		JButton highlightOutlineColor = new JButton("Highlight Outline");
-		JButton backgroundColor = new JButton("Background");
-		colorInsidePanel.add(normalColor);
-		colorInsidePanel.add(outlineColor);
-		colorInsidePanel.add(highlightColor);
-		colorInsidePanel.add(highlightOutlineColor);
-		colorInsidePanel.add(backgroundColor);
-
-		colorOptionsPanel.add(new JLabel("Colors:"));
-		colorOptionsPanel.add(colorInsidePanel);
-
-		normalColor.setBorderPainted(false);
-		highlightColor.setBorderPainted(false);
-		outlineColor.setBorderPainted(false);
-		highlightOutlineColor.setBorderPainted(false);
-		backgroundColor.setBorderPainted(false);
-		normalColor.setOpaque(true);
-		highlightColor.setOpaque(true);
-		outlineColor.setOpaque(true);
-		highlightOutlineColor.setOpaque(true);
-		backgroundColor.setOpaque(true);
-
-		normalColor.setBackground(Color.white);
-		outlineColor.setBackground(Color.black);
-		highlightColor.setBackground(Color.blue);
-		highlightOutlineColor.setBackground(Color.white);
-		backgroundColor.setBackground(Color.green);
-
-		outputSequencer.setNormal(normalColor.getBackground());
-		outputSequencer.setOutline(outlineColor.getBackground());
-		outputSequencer.setHighlight(highlightColor.getBackground());
-		outputSequencer.setHighlightOutline(highlightOutlineColor.getBackground());
-		outputSequencer.setBackground(backgroundColor.getBackground());
-
-		normalColor.setForeground(Color.DARK_GRAY);
-		outlineColor.setForeground(Color.DARK_GRAY);
-		highlightColor.setForeground(Color.DARK_GRAY);
-		highlightOutlineColor.setForeground(Color.DARK_GRAY);
-		backgroundColor.setForeground(Color.DARK_GRAY);
-
-		JPanel projectPanel = new JPanel();
-		projectPanel.setLayout(new BoxLayout(projectPanel, BoxLayout.PAGE_AXIS));
-		projectPanel.add(projectOptionsPanel);
-		projectPanel.add(fontOptionsPanel);
-
-		JPanel locationPanel = new JPanel();
-		locationPanel.setLayout(new GridLayout(2, 2));
-		locationPanel.add(new JLabel("Alignment"));
-		String[] locationOptions = new String[] { "Top", "Middle", "Bottom" };
-		JComboBox<String> locationComboBox = new JComboBox<String>(locationOptions);
-		locationComboBox.setSelectedIndex(2);
-		locationPanel.add(locationComboBox);
-		locationPanel.add(new JLabel("Number of lines"));
-		String[] numLinesOptions = new String[] { "1", "2" };
-		JComboBox<String> numLinesComboBox = new JComboBox<String>(numLinesOptions);
-		numLinesComboBox.setSelectedIndex(1);
-		locationPanel.add(numLinesComboBox);
-
-		JPanel topPanel = new JPanel();
-		topPanel.setLayout(new GridLayout(0, 4, 5, 0));
-		topPanel.add(projectPanel);
-		topPanel.add(dimensionsPanel);
-		topPanel.add(colorOptionsPanel);
-		topPanel.add(locationPanel);
-
+		// Audio control panel.
 		JPanel audioControlPanel = new JPanel();
 		audioControlPanel.setLayout(new BoxLayout(audioControlPanel, BoxLayout.PAGE_AXIS));
 
 		final JFXPanel fxPanel = new JFXPanel();
-		fxPanel.setMinimumSize(minSize);
+
+		// Buttons for play back control.
+		JButton play = new JButton("Play/Pause");
+		JButton stop = new JButton("Stop");
+		JButton set = new JButton("Set");
+		JButton resetAll = new JButton("Reset All");
+
+		playbackTimeLabel = new JLabel("0:00/0:00");
+
+		// Buttons for adjustment controls.
+		JButton nudgeLeft = new JButton("<");
+		JButton nudgeRight = new JButton(">");
+		JButton nudgeAllLeft = new JButton("< All");
+		JButton nudgeAllRight = new JButton("> All");
+
+		JTextField nudgeAmount = new JTextField("20");
 
 		JPanel syncPanel = new JPanel();
 		syncPanel.add(playbackTimeLabel);
 		syncPanel.add(play);
-		syncPanel.add(pause);
 		syncPanel.add(stop);
 		syncPanel.add(set);
 		syncPanel.add(resetAll);
-		syncPanel.add(preview);
 
-		syncPanel.add(tempoSlider);
-
-		lyricsInputPanel.setMinimumSize(minSize);
-		syncPanel.setMinimumSize(minSize);
+		syncPanel.add(nudgeLeft);
+		syncPanel.add(nudgeRight);
+		syncPanel.add(nudgeAllLeft);
+		syncPanel.add(nudgeAllRight);
+		syncPanel.add(nudgeAmount);
 
 		audioControlPanel.add(syncPanel);
 		audioControlPanel.add(fxPanel);
 
-		mainPanel.add(BorderLayout.NORTH, topPanel);
+		// Set minimum sizes.
+		lyricsInputPanel.setMinimumSize(minSize);
+		syncPanel.setMinimumSize(minSize);
+		fxPanel.setMinimumSize(minSize);
+
+		// Main panel with all contents.
+		JPanel mainPanel = new JPanel();
+		mainPanel.setLayout(new BorderLayout());
+		mainPanel.add(BorderLayout.NORTH, projectOptionsPanel);
 		mainPanel.add(BorderLayout.CENTER, splitPane);
 		mainPanel.add(BorderLayout.SOUTH, audioControlPanel);
 
-		frame.getContentPane().add(BorderLayout.NORTH, menuBar);
-		frame.getContentPane().add(mainPanel);
+		// Creating the MenuBar and adding components.
+		JMenuBar menuBar = new JMenuBar();
+		JMenu mFile = new JMenu("File");
+		JMenu mEdit = new JMenu("Edit");
+		JMenu m2 = new JMenu("Help");
+		menuBar.add(mFile);
+		menuBar.add(mEdit);
+		menuBar.add(m2);
 
-		frame.setVisible(true);
+		JMenuItem mImportSong = new JMenuItem(new AbstractAction("Import MP3") {
+			private static final long serialVersionUID = 1L;
 
-		splitComboBox.addItemListener(new ItemListener() {
-			@Override
-			public void itemStateChanged(ItemEvent e) {
-				lyricsProcessor.loadLyrics(lyricsTextArea.getText(), (String) splitComboBox.getSelectedItem());
-			}
-		});
-
-		fpsComboBox.addItemListener(new ItemListener() {
-			@Override
-			public void itemStateChanged(ItemEvent e) {
-				outputSequencer.setFPS((String) splitComboBox.getSelectedItem());
-			}
-		});
-
-		lyricsTextArea.getDocument().addDocumentListener(new DocumentListener() {
-			@Override
-			public void removeUpdate(DocumentEvent e) {
-				lyricsProcessor.loadLyrics(lyricsTextArea.getText(), (String) splitComboBox.getSelectedItem());
-			}
-
-			@Override
-			public void insertUpdate(DocumentEvent e) {
-				lyricsProcessor.loadLyrics(lyricsTextArea.getText(), (String) splitComboBox.getSelectedItem());
-			}
-
-			@Override
-			public void changedUpdate(DocumentEvent e) {
-			}
-		});
-
-		widthTextField.getDocument().addDocumentListener(new DocumentListener() {
-			public void setWidth() {
-				int width;
-				try {
-					width = Integer.parseInt(widthTextField.getText());
-
-				} catch (NumberFormatException ex) {
-					width = 1920;
-				}
-				outputSequencer.setWidth(width);
-			}
-
-			@Override
-			public void removeUpdate(DocumentEvent e) {
-				setWidth();
-			}
-
-			@Override
-			public void insertUpdate(DocumentEvent e) {
-				setWidth();
-			}
-
-			@Override
-			public void changedUpdate(DocumentEvent e) {
-			}
-		});
-
-		heightTextField.getDocument().addDocumentListener(new DocumentListener() {
-			public void setHeight() {
-				int height;
-				try {
-					height = Integer.parseInt(heightTextField.getText());
-
-				} catch (NumberFormatException ex) {
-					height = 1080;
-				}
-				outputSequencer.setWidth(height);
-			}
-
-			@Override
-			public void removeUpdate(DocumentEvent e) {
-				setHeight();
-			}
-
-			@Override
-			public void insertUpdate(DocumentEvent e) {
-				setHeight();
-			}
-
-			@Override
-			public void changedUpdate(DocumentEvent e) {
-			}
-		});
-
-		tempoSlider.addChangeListener(new ChangeListener() {
-			public void stateChanged(ChangeEvent e) {
-				System.out.println("Slider: " + tempoSlider.getValue() / 10.0);
-			}
-		});
-
-		play.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				player.play();
-			}
-		});
-
-		pause.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				player.pause();
-			}
-		});
-
-		stop.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				player.stop();
-				waveFormPane.stop();
-			}
-		});
-
-		resetAll.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				int n = JOptionPane.showConfirmDialog(frame, "Reset all synchronization markers?", "Reset all",
-						JOptionPane.YES_NO_OPTION);
-				System.out.println(n);
-				if (n == 0) {
-					lyricsProcessor.resetAllSyncMarkers();
-				}
-			}
-		});
-
-		set.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				long currentTimestamp = player.getPlaybackPosition();
-				if (currentTimestamp < 0) {
-					return;
-				}
-				lyricsProcessor.setTimestampForCurrentWord(currentTimestamp);
-			}
-		});
-
-		browseSong.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				// create an object of JFileChooser class
@@ -499,87 +209,344 @@ public class Main {
 							}
 						});
 					} catch (Exception ex) {
-						System.err.println("Error transcoding file");
-						ex.printStackTrace();
+						log.error("Main: error transcoding file");
+						log.error(ex);
 					}
 				}
 			}
 		});
+		JMenuItem m11 = new JMenuItem(new AbstractAction("Open Project") {
+			private static final long serialVersionUID = 1L;
 
-		browseFont.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				FontDialog dialog = new FontDialog((Frame) null, "Select Font", true);
+				System.out.println("Open Project");
+			}
+		});
+		JMenuItem m22 = new JMenuItem(new AbstractAction("Save Project") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				System.out.println("Save Project");
+			}
+		});
+		JMenuItem m33 = new JMenuItem(new AbstractAction("Export") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				System.out.println("Export");
+
+				JProgressBar dialogProgressBar = new JProgressBar(0, 100);
+				dialogProgressBar.setIndeterminate(false);
+
+				JDialog progressDialog = new JDialog(frame, "Export progress", true);
+				progressDialog.add(BorderLayout.CENTER, dialogProgressBar);
+				progressDialog.add(BorderLayout.NORTH, new JLabel("Exporting..."));
+				progressDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+				progressDialog.setSize(300, 75);
+				progressDialog.setLocationRelativeTo(frame);
+
+				outputSequencer.export(lyricsProcessor, player,
+						new SequencerProgressChecker(progressDialog, dialogProgressBar));
+				progressDialog.setVisible(true);
+			}
+		});
+
+		mFile.add(mImportSong);
+		mFile.add(new JSeparator());
+		mFile.add(m11);
+		mFile.add(m22);
+		mFile.add(new JSeparator());
+		mFile.add(m33);
+
+		JMenuItem mDimensions = new JMenuItem(new AbstractAction("Video width and height") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				Dimension preferredSize = new Dimension(250, 120);
+
+				JDialog mDialog = new JDialog(frame, "Video width and height");
+				mDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+				mDialog.setLocationRelativeTo(frame);
+				mDialog.setPreferredSize(preferredSize);
+				mDialog.setMinimumSize(preferredSize);
+				JPanel gridPanel = new JPanel();
+				gridPanel.setLayout(new GridLayout(2, 2));
+
+				JTextField widthTextField = new JTextField(String.format("%d", outputSequencer.getWidth()));
+				JTextField heightTextField = new JTextField(String.format("%d", outputSequencer.getHeight()));
+
+				gridPanel.add(new JLabel("Width"));
+				gridPanel.add(widthTextField);
+
+				gridPanel.add(new JLabel("Height"));
+				gridPanel.add(heightTextField);
+
+				JButton doneButton = new JButton("Done");
+				doneButton.addActionListener(new ActionListener() {
+
+					@Override
+					public void actionPerformed(ActionEvent e) {
+						try {
+							int newWidth = Integer.parseInt(widthTextField.getText());
+							int newHeight = Integer.parseInt(heightTextField.getText());
+
+							outputSequencer.setWidth(newWidth);
+							outputSequencer.setHeight(newHeight);
+
+							log.debug("Set width and height to " + newWidth + " " + newHeight);
+						} catch (NumberFormatException ex) {
+							log.error("Could not parse width " + widthTextField.getText() + " or height "
+									+ heightTextField.getText() + " to integers.");
+							log.error(ex);
+						}
+						mDialog.dispose();
+					}
+				});
+
+				JPanel dialogPanel = new JPanel();
+				dialogPanel.setBorder(BorderFactory.createEmptyBorder(DIALOG_PADDING, DIALOG_PADDING, DIALOG_PADDING,
+						DIALOG_PADDING));
+				dialogPanel.setLayout(new BoxLayout(dialogPanel, BoxLayout.PAGE_AXIS));
+				dialogPanel.add(gridPanel);
+				dialogPanel.add(doneButton);
+
+				mDialog.add(dialogPanel);
+
+				mDialog.pack();
+				mDialog.setVisible(true);
+			}
+		});
+
+		JMenuItem mColors = new JMenuItem(new AbstractAction("Text colors") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				JDialog dialog = new JDialog(frame, "Text colors");
 				dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-				dialog.setSelectedFont(lyricsProcessor.getSelectedFont());
+				dialog.setLocationRelativeTo(frame);
+
+				JPanel colorPanel = new JPanel();
+				colorPanel.setBorder(BorderFactory.createEmptyBorder(DIALOG_PADDING, DIALOG_PADDING, DIALOG_PADDING,
+						DIALOG_PADDING));
+				colorPanel.setLayout(new GridLayout(5, 2));
+				JButton normalColor = new JButton();
+				JButton outlineColor = new JButton();
+				JButton highlightColor = new JButton();
+				JButton highlightOutlineColor = new JButton();
+				JButton backgroundColor = new JButton();
+				colorPanel.add(new JLabel("Normal"));
+				colorPanel.add(normalColor);
+				colorPanel.add(new JLabel("Outline"));
+				colorPanel.add(outlineColor);
+				colorPanel.add(new JLabel("Highlight"));
+				colorPanel.add(highlightColor);
+				colorPanel.add(new JLabel("Highlight Outline"));
+				colorPanel.add(highlightOutlineColor);
+				colorPanel.add(new JLabel("Background"));
+				colorPanel.add(backgroundColor);
+
+				normalColor.setBorderPainted(false);
+				highlightColor.setBorderPainted(false);
+				outlineColor.setBorderPainted(false);
+				highlightOutlineColor.setBorderPainted(false);
+				backgroundColor.setBorderPainted(false);
+
+				normalColor.setOpaque(true);
+				highlightColor.setOpaque(true);
+				outlineColor.setOpaque(true);
+				highlightOutlineColor.setOpaque(true);
+				backgroundColor.setOpaque(true);
+
+				normalColor.setBackground(outputSequencer.getNormal());
+				outlineColor.setBackground(outputSequencer.getOutline());
+				highlightColor.setBackground(outputSequencer.getHighlight());
+				highlightOutlineColor.setBackground(outputSequencer.getHighlightOutline());
+				backgroundColor.setBackground(outputSequencer.getBackground());
+
+				normalColor.setForeground(Color.DARK_GRAY);
+				outlineColor.setForeground(Color.DARK_GRAY);
+				highlightColor.setForeground(Color.DARK_GRAY);
+				highlightOutlineColor.setForeground(Color.DARK_GRAY);
+				backgroundColor.setForeground(Color.DARK_GRAY);
+
+				normalColor.addActionListener(evt -> {
+					Color newColor = JColorChooser.showDialog(frame, "Choose normal color",
+							normalColor.getBackground());
+					if (newColor != null) {
+						normalColor.setBackground(newColor);
+						outputSequencer.setNormal(newColor);
+					}
+				});
+
+				outlineColor.addActionListener(evt -> {
+					Color newColor = JColorChooser.showDialog(frame, "Choose outline color",
+							outlineColor.getBackground());
+					if (newColor != null) {
+						outlineColor.setBackground(newColor);
+						outputSequencer.setOutline(newColor);
+					}
+				});
+
+				highlightColor.addActionListener(evt -> {
+					Color newColor = JColorChooser.showDialog(frame, "Choose highlight color",
+							highlightColor.getBackground());
+					if (newColor != null) {
+						highlightColor.setBackground(newColor);
+						outputSequencer.setHighlight(newColor);
+					}
+				});
+
+				highlightOutlineColor.addActionListener(evt -> {
+					Color newColor = JColorChooser.showDialog(frame, "Choose highlight outline color",
+							highlightOutlineColor.getBackground());
+					if (newColor != null) {
+						highlightOutlineColor.setBackground(newColor);
+						outputSequencer.setHighlightOutline(newColor);
+					}
+				});
+
+				backgroundColor.addActionListener(evt -> {
+					Color newColor = JColorChooser.showDialog(frame, "Choose background color",
+							backgroundColor.getBackground());
+					if (newColor != null) {
+						backgroundColor.setBackground(newColor);
+						outputSequencer.setBackground(newColor);
+					}
+				});
+
+				dialog.add(colorPanel);
+				dialog.pack();
+				dialog.setVisible(true);
+			}
+		});
+
+		JMenuItem mFonts = new JMenuItem(new AbstractAction("Text font and size") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				FontDialog dialog = new FontDialog(frame, "Select text font and size", true);
+				dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+				dialog.setSelectedFont(lyricsProcessor.getOutputFont());
 				dialog.setVisible(true);
 				if (!dialog.isCancelSelected()) {
-					System.out.printf("Selected font is: %s%n", dialog.getSelectedFont());
 					lyricsProcessor.loadFont(dialog.getSelectedFont());
-					fontPathField.setText(dialog.getSelectedFont().getName());
-
-					outputSequencer.setFont(dialog.getSelectedFont());
 				}
 			}
 		});
 
-		normalColor.addActionListener(new ActionListener() {
+		JMenuItem mAlignment = new JMenuItem(new AbstractAction("Text alignment") {
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				Color newColor = JColorChooser.showDialog(null, "Choose normal color", normalColor.getBackground());
-				if (newColor != null) {
-					normalColor.setBackground(newColor);
-					outputSequencer.setNormal(newColor);
+				String[] options = new String[] { "Center", "Left" };
+				String selectedValue = (String) JOptionPane.showInputDialog(frame, "Set alignment to",
+						"Video text alignment", JOptionPane.PLAIN_MESSAGE, null, options,
+						outputSequencer.getAlignment());
+
+				if ((selectedValue != null) && (selectedValue.length() > 0)) {
+					outputSequencer.setAlignment(selectedValue);
 				}
 			}
 		});
 
-		outlineColor.addActionListener(new ActionListener() {
+		JMenuItem mFPS = new JMenuItem(new AbstractAction("Frames per second") {
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				Color newColor = JColorChooser.showDialog(null, "Choose normal outline color",
-						outlineColor.getBackground());
-				if (newColor != null) {
-					outlineColor.setBackground(newColor);
-					outputSequencer.setOutline(newColor);
+				String[] options = new String[] { "24:1", "25:1", "30:1", "60:1", "12:1", "15:1" };
+				String selectedValue = (String) JOptionPane.showInputDialog(frame, "Set FPS to",
+						"Video frames per second", JOptionPane.PLAIN_MESSAGE, null, options, outputSequencer.getFPS());
+
+				if ((selectedValue != null) && (selectedValue.length() > 0)) {
+					outputSequencer.setFPS(selectedValue);
 				}
 			}
 		});
 
-		highlightColor.addActionListener(new ActionListener() {
+		JMenuItem mLines = new JMenuItem(new AbstractAction("Number of lines") {
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				Color newColor = JColorChooser.showDialog(null, "Choose highlight color",
-						highlightColor.getBackground());
-				if (newColor != null) {
-					highlightColor.setBackground(newColor);
-					outputSequencer.setHighlight(newColor);
+				String[] options = new String[] { "1", "2" };
+				String selectedValue = (String) JOptionPane.showInputDialog(frame, "Set number of lines to",
+						"Number of lines", JOptionPane.PLAIN_MESSAGE, null, options,
+						outputSequencer.getNumberOfLines());
+
+				if ((selectedValue != null) && (selectedValue.length() > 0)) {
+					outputSequencer.setNumberOfLines(selectedValue);
 				}
 			}
 		});
 
-		highlightOutlineColor.addActionListener(new ActionListener() {
+		mEdit.add(mDimensions);
+		mEdit.add(new JSeparator());
+		mEdit.add(mFPS);
+		mEdit.add(new JSeparator());
+		mEdit.add(mFonts);
+		mEdit.add(mAlignment);
+		mEdit.add(mColors);
+		mEdit.add(new JSeparator());
+		mEdit.add(mLines);
+
+		frame.getContentPane().add(BorderLayout.NORTH, menuBar);
+		frame.getContentPane().add(mainPanel);
+
+		frame.setVisible(true);
+
+		lyricsTextArea.getDocument().addDocumentListener(new DocumentListener() {
 			@Override
-			public void actionPerformed(ActionEvent e) {
-				Color newColor = JColorChooser.showDialog(null, "Choose highlight outline color",
-						highlightOutlineColor.getBackground());
-				if (newColor != null) {
-					highlightOutlineColor.setBackground(newColor);
-					outputSequencer.setHighlightOutline(newColor);
-				}
+			public void removeUpdate(DocumentEvent e) {
+				lyricsProcessor.loadLyrics(lyricsTextArea.getText(), (String) splitComboBox.getSelectedItem());
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e) {
+				lyricsProcessor.loadLyrics(lyricsTextArea.getText(), (String) splitComboBox.getSelectedItem());
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e) {
 			}
 		});
 
-		backgroundColor.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				Color newColor = JColorChooser.showDialog(null, "Choose background color",
-						backgroundColor.getBackground());
-				if (newColor != null) {
-					backgroundColor.setBackground(newColor);
-					outputSequencer.setBackground(newColor);
-				}
+		splitComboBox.addItemListener(
+				ev -> lyricsProcessor.loadLyrics(lyricsTextArea.getText(), (String) splitComboBox.getSelectedItem()));
+
+		play.addActionListener(ev -> player.playOrPause());
+
+		stop.addActionListener(ev -> {
+			player.stop();
+			waveFormPane.stop();
+		});
+
+		nudgeLeft.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), false, true));
+		nudgeRight.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), false, false));
+		nudgeAllLeft.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), true, true));
+		nudgeAllRight.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), true, false));
+
+		resetAll.addActionListener(ev -> {
+			int n = JOptionPane.showConfirmDialog(frame, "Reset all synchronization markers?", "Reset all",
+					JOptionPane.YES_NO_OPTION);
+			if (n == 0) {
+				lyricsProcessor.resetAllSyncMarkers();
 			}
+		});
+
+		set.addActionListener(ev -> {
+			long currentTimestamp = player.getPlaybackPosition();
+			if (currentTimestamp < 0) {
+				return;
+			}
+			lyricsProcessor.setTimestampForCurrentWordAndMoveToNext(currentTimestamp);
 		});
 
 		Platform.runLater(new Runnable() {

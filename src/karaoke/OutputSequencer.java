@@ -1,20 +1,16 @@
 package karaoke;
 
 import java.awt.Color;
-import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import javax.imageio.ImageIO;
-
+import org.apache.log4j.Logger;
 import org.jcodec.api.awt.AWTSequenceEncoder;
 import org.jcodec.common.io.FileChannelWrapper;
 import org.jcodec.common.io.NIOUtils;
@@ -22,13 +18,16 @@ import org.jcodec.common.model.Rational;
 import org.jcodec.common.tools.MainUtils;
 
 public class OutputSequencer {
+	public static Logger log = Logger.getLogger(Main.class);
+
 	private int width = 1920, height = 1080;
-	private Font font = new Font("TimesRoman", Font.BOLD, 72);
-
 	private String fps = "30:1";
+	private String alignment = "Center";
 	private int framesPerSecond = 30;
+	private String numberOfLines = "2";
 
-	private Color normal, outline, highlight, highlightOutline, background;
+	private Color normal = Color.white, outline = Color.black, highlight = Color.blue, highlightOutline = Color.white,
+			background = Color.green;
 
 	public OutputSequencer() {
 
@@ -42,11 +41,9 @@ public class OutputSequencer {
 		this.height = height;
 	}
 
-	public void setFont(Font font) {
-		this.font = font;
-	}
-
 	public void setFPS(String fps) {
+		log.debug("Output sequencer set FPS: " + fps);
+
 		this.fps = fps;
 		if (fps.equals("30:1")) {
 			framesPerSecond = 30;
@@ -54,6 +51,10 @@ public class OutputSequencer {
 			framesPerSecond = 60;
 		} else if (fps.equals("24:1")) {
 			framesPerSecond = 24;
+		} else if (fps.equals("12:1")) {
+			framesPerSecond = 12;
+		} else if (fps.equals("15:1")) {
+			framesPerSecond = 15;
 		} else {
 			framesPerSecond = 25;
 		}
@@ -61,8 +62,11 @@ public class OutputSequencer {
 	}
 
 	public void export(LyricsProcessor lyricsProcessor, AudioPlayer player, SequencerListener listener) {
+		log.debug("Output sequencer starting export.");
+
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		executor.submit(() -> {
+			log.debug("Output sequencer starting thread: " + Thread.currentThread().getName());
 			System.out.println("starting thread " + Thread.currentThread().getName());
 			try {
 				sequence(lyricsProcessor, player, listener);
@@ -86,20 +90,20 @@ public class OutputSequencer {
 		BufferedImage backgroundBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D backgroundGraphics = backgroundBufferedImage.createGraphics();
 		backgroundGraphics.setRenderingHints(renderingHints);
-		backgroundGraphics.setFont(font);
+		backgroundGraphics.setFont(lyricsProcessor.getOutputFont());
 
 		// Foreground components.
 		BufferedImage foregroundBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D foregroundGraphics = foregroundBufferedImage.createGraphics();
 		foregroundGraphics.setRenderingHints(renderingHints);
-		foregroundGraphics.setFont(font);
+		foregroundGraphics.setFont(lyricsProcessor.getOutputFont());
 		foregroundGraphics.setPaint(highlight);
 
 		// Second line components
 		BufferedImage secondBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D secondGraphics = secondBufferedImage.createGraphics();
 		secondGraphics.setRenderingHints(renderingHints);
-		secondGraphics.setFont(font);
+		secondGraphics.setFont(lyricsProcessor.getOutputFont());
 		secondGraphics.setPaint(normal);
 
 		// Final image components.
@@ -325,5 +329,53 @@ public class OutputSequencer {
 		public void done();
 
 		public void setProgress(double progress);
+	}
+
+	public int getWidth() {
+		return width;
+	}
+
+	public int getHeight() {
+		return height;
+	}
+
+	public String getFPS() {
+		return fps;
+	}
+
+	public String getAlignment() {
+		return alignment;
+	}
+
+	public void setAlignment(String alignment) {
+		this.alignment = alignment;
+	}
+
+	public String getNumberOfLines() {
+		return numberOfLines;
+	}
+
+	public void setNumberOfLines(String numberOfLines) {
+		this.numberOfLines = numberOfLines;
+	}
+
+	public Color getNormal() {
+		return normal;
+	}
+
+	public Color getOutline() {
+		return outline;
+	}
+
+	public Color getHighlight() {
+		return highlight;
+	}
+
+	public Color getHighlightOutline() {
+		return highlightOutline;
+	}
+
+	public Color getBackground() {
+		return background;
 	}
 }
