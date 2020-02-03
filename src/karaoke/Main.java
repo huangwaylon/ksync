@@ -48,6 +48,8 @@ public class Main {
 
 	private static final OutputSequencer outputSequencer = new OutputSequencer();
 
+	private static final JPanel previewPanel = new JPanel();
+
 	public static void main(String args[]) {
 		log.debug("Starting karaoke sync program.");
 
@@ -102,7 +104,10 @@ public class Main {
 		displayScrollPane.setPreferredSize(new Dimension(250, 250));
 		displayScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
-		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, lyricsInputPanel, displayScrollPane);
+		JSplitPane rightSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, displayScrollPane, previewPanel);
+		rightSplitPane.setContinuousLayout(true);
+
+		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, lyricsInputPanel, rightSplitPane);
 		splitPane.setContinuousLayout(true);
 
 		// Top pane for displaying audio path.

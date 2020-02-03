@@ -20,11 +20,15 @@ import org.jcodec.common.tools.MainUtils;
 public class OutputSequencer {
 	public static Logger log = Logger.getLogger(Main.class);
 
+	private static final int leftAlignPadding = 10;
+
 	private int width = 1920, height = 1080;
 	private String fps = "30:1";
 	private String alignment = "Center";
 	private int framesPerSecond = 30;
 	private String numberOfLines = "2";
+
+	private boolean centerAligned = true;
 
 	private Color normal = Color.white, outline = Color.black, highlight = Color.blue, highlightOutline = Color.white,
 			background = Color.green;
@@ -79,8 +83,7 @@ public class OutputSequencer {
 
 	public void sequence(LyricsProcessor lyricsProcessor, AudioPlayer player, SequencerListener listener)
 			throws IOException {
-		FileChannelWrapper out = null;
-		out = NIOUtils.writableChannel(MainUtils.tildeExpand("/Users/waylonh/Downloads/out.mp4"));
+		FileChannelWrapper out = NIOUtils.writableChannel(MainUtils.tildeExpand("~/out.mp4"));
 		AWTSequenceEncoder encoder = new AWTSequenceEncoder(out, Rational.parse(fps));
 
 		RenderingHints renderingHints = new RenderingHints(RenderingHints.KEY_TEXT_ANTIALIASING,
@@ -126,16 +129,13 @@ public class OutputSequencer {
 		String phrase = "";
 		String nextPhrase = "";
 
-		if (lyrics.length >= 1) {
-			nextPhrase = String.join(" ", lyrics[0]);
-		}
-
 		int spaceWidth = fontMetrics.stringWidth(" ");
 		int wordWidth = 0;
 		int totalWidthSoFar = 0;
 
-		int phraseWidth = spaceWidth;
 		int phraseHeight = fontMetrics.getAscent();
+		int phraseWidth = spaceWidth;
+		int nextPhraseWidth = spaceWidth;
 
 		// Computed for the current word.
 		int widthPerFrame = 0;
@@ -204,6 +204,7 @@ public class OutputSequencer {
 
 				if (phraseIndex + 1 < lyrics.length) {
 					nextPhrase = String.join(" ", lyrics[phraseIndex + 1]);
+					nextPhraseWidth = fontMetrics.stringWidth(nextPhrase);
 				} else {
 					nextPhrase = "";
 				}
@@ -225,7 +226,7 @@ public class OutputSequencer {
 
 			genImage(i, phrase, nextPhrase, backgroundGraphics, foregroundGraphics, secondGraphics, finalGraphics,
 					backgroundBufferedImage, foregroundBufferedImage, secondBufferedImage, finalImage, phraseWidth,
-					phraseHeight, width);
+					nextPhraseWidth, phraseHeight, width);
 			encoder.encodeImage(finalImage);
 
 			frames += 1;
@@ -262,8 +263,8 @@ public class OutputSequencer {
 	private void genImage(int imageNum, String phrase, String nextPhrase, Graphics2D backgroundGraphics,
 			Graphics2D foregroundGraphics, Graphics2D secondGraphics, Graphics finalGraphics,
 			BufferedImage backgroundBufferedImage, BufferedImage foregroundBufferedImage,
-			BufferedImage secondBufferedImage, BufferedImage finalImage, int phraseWidth, int phraseHeight,
-			int phraseFractionWidth) {
+			BufferedImage secondBufferedImage, BufferedImage finalImage, int phraseWidth, int nextPhraseWidth,
+			int phraseHeight, int phraseFractionWidth) {
 		// Clear foreground image.
 		foregroundGraphics.setBackground(new Color(255, 255, 255, 0));
 		foregroundGraphics.clearRect(0, 0, width, height);
@@ -278,13 +279,14 @@ public class OutputSequencer {
 		backgroundGraphics.setPaint(normal);
 
 		// Align to center.
-		float x = (width - phraseWidth) / 2;
 		float y = height / 2 + phraseHeight / 4;
+		float x = centerAligned ? (width - phraseWidth) / 2 : leftAlignPadding;
+		float nextX = centerAligned ? (width - nextPhraseWidth) / 2 : leftAlignPadding;
 
 		// Draw the phrase for both layers.
 		backgroundGraphics.drawString(phrase, x, y);
 		foregroundGraphics.drawString(phrase, x, y);
-		secondGraphics.drawString(nextPhrase, x, (int) (y + 1.5 * phraseHeight));
+		secondGraphics.drawString(nextPhrase, nextX, (int) (y + 1.5 * phraseHeight));
 
 		// Cut the foreground slice.
 		BufferedImage foregroundSubImage = foregroundBufferedImage.getSubimage((int) x, (int) y - phraseHeight,
@@ -349,6 +351,8 @@ public class OutputSequencer {
 
 	public void setAlignment(String alignment) {
 		this.alignment = alignment;
+
+		centerAligned = alignment.equals("Center");
 	}
 
 	public String getNumberOfLines() {
@@ -377,5 +381,50 @@ public class OutputSequencer {
 
 	public Color getBackground() {
 		return background;
+	}
+
+	public static class ColorGroup {
+		private Color normal = Color.white, outline = Color.black, highlight = Color.blue,
+				highlightOutline = Color.white, background = Color.green;
+
+		public void setNormal(Color normal) {
+			this.normal = normal;
+		}
+
+		public void setOutline(Color outline) {
+			this.outline = outline;
+		}
+
+		public void setHighlight(Color highlight) {
+			this.highlight = highlight;
+		}
+
+		public void setHighlightOutline(Color highlightOutline) {
+			this.highlightOutline = highlightOutline;
+		}
+
+		public void setBackground(Color background) {
+			this.background = background;
+		}
+
+		public Color getNormal() {
+			return normal;
+		}
+
+		public Color getOutline() {
+			return outline;
+		}
+
+		public Color getHighlight() {
+			return highlight;
+		}
+
+		public Color getHighlightOutline() {
+			return highlightOutline;
+		}
+
+		public Color getBackground() {
+			return background;
+		}
 	}
 }

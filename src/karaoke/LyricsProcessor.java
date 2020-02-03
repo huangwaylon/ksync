@@ -19,6 +19,10 @@ import org.apache.log4j.Logger;
 public class LyricsProcessor {
 	public static Logger log = Logger.getLogger(Main.class);
 
+	private static final Color normalColor = Color.white;
+	private static final Color currentColor = Color.yellow;
+	private static final Color doneColor = Color.lightGray;
+
 	private final int displayFontSize = 24;
 	private final int outputFontSize = 72;
 
@@ -163,6 +167,14 @@ public class LyricsProcessor {
 
 				labels[i][j] = word;
 				timeLabels[i][j] = wordTiming;
+
+				if (phraseIndex == i && wordIndex == j) {
+					labels[i][j].setBackground(currentColor);
+				} else if (wordTimestamps[i][j] >= 0) {
+					labels[i][j].setBackground(doneColor);
+				} else {
+					labels[i][j].setBackground(normalColor);
+				}
 			}
 			displayPanel.add(phrase);
 			displayPanel.add(Box.createRigidArea(new Dimension(0, 10)));
@@ -184,9 +196,9 @@ public class LyricsProcessor {
 
 		// Re-color current index.
 		if (wordTimestamps[phraseIndex][wordIndex] > 0) {
-			labels[phraseIndex][wordIndex].setBackground(Color.LIGHT_GRAY);
+			labels[phraseIndex][wordIndex].setBackground(doneColor);
 		} else {
-			labels[phraseIndex][wordIndex].setBackground(Color.WHITE);
+			labels[phraseIndex][wordIndex].setBackground(normalColor);
 		}
 
 		this.phraseIndex = pIndex;
@@ -194,7 +206,7 @@ public class LyricsProcessor {
 
 		System.out.println("indicies: " + phraseIndex + " " + wordIndex);
 
-		labels[phraseIndex][wordIndex].setBackground(Color.YELLOW);
+		labels[phraseIndex][wordIndex].setBackground(currentColor);
 	}
 
 	public void setTimestampForCurrentWordAndMoveToNext(long microseconds) {
@@ -217,7 +229,7 @@ public class LyricsProcessor {
 
 		wordTimestamps[phraseIndex][wordIndex] = microseconds;
 
-		labels[phraseIndex][wordIndex].setBackground(Color.LIGHT_GRAY);
+		labels[phraseIndex][wordIndex].setBackground(doneColor);
 		timeLabels[phraseIndex][wordIndex].setText(formatMicroseconds(microseconds));
 
 		clearAllLess(microseconds);
@@ -235,7 +247,11 @@ public class LyricsProcessor {
 			for (int j = 0; j < wordTimestamps[i].length; j++) {
 				wordTimestamps[i][j] = -1;
 
-				labels[i][j].setBackground(Color.WHITE);
+				if (phraseIndex == i && wordIndex == j) {
+					labels[i][j].setBackground(currentColor);
+				} else {
+					labels[i][j].setBackground(normalColor);
+				}
 				timeLabels[i][j].setText("");
 			}
 		}
@@ -349,7 +365,7 @@ public class LyricsProcessor {
 							|| (intersected && otherTime <= playbackPosition)) {
 						wordTimestamps[pIndex][wIndex] = -1;
 						timeLabels[pIndex][wIndex].setText("");
-						labels[pIndex][wIndex].setBackground(Color.WHITE);
+						labels[pIndex][wIndex].setBackground(normalColor);
 					}
 				}
 			} else {
