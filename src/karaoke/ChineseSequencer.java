@@ -9,8 +9,9 @@ import java.awt.image.BufferedImage;
 import org.apache.log4j.Logger;
 
 import karaoke.OutputSequencer.ColorGroup;
+import karaoke.OutputSequencer.ImageGenerator;
 
-public class ChineseSequencer {
+public class ChineseSequencer implements ImageGenerator {
 	public static Logger log = Logger.getLogger(Main.class);
 
 	private static final int leftAlignPadding = 10;
@@ -40,6 +41,12 @@ public class ChineseSequencer {
 		output = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 		outputGraphics = output.createGraphics();
 		outputGraphics.setRenderingHints(renderingHints);
+	}
+
+	@Override
+	public BufferedImage draw() {
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 	public BufferedImage draw(String phrase1, String phrase2, int w1, int w2, int h1, int fraction,

@@ -33,8 +33,12 @@ public class OutputSequencer {
 	private Color normal = Color.white, outline = Color.black, highlight = Color.blue, highlightOutline = Color.white,
 			background = Color.green;
 
-	public OutputSequencer() {
+	private LyricsProcessor lyricsProcessor;
+	private AudioPlayer player;
 
+	public OutputSequencer(LyricsProcessor lyricsProcessor, AudioPlayer player) {
+		this.lyricsProcessor = lyricsProcessor;
+		this.player = player;
 	}
 
 	public void setWidth(int width) {
@@ -65,7 +69,7 @@ public class OutputSequencer {
 		System.out.println("Set FPS: " + fps + " framesPerSecond: " + framesPerSecond);
 	}
 
-	public void export(LyricsProcessor lyricsProcessor, AudioPlayer player, SequencerListener listener) {
+	public void export(SequencerListener listener) {
 		log.debug("Output sequencer starting export.");
 
 		ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -426,5 +430,9 @@ public class OutputSequencer {
 		public Color getBackground() {
 			return background;
 		}
+	}
+
+	public static interface ImageGenerator {
+		public BufferedImage draw();
 	}
 }

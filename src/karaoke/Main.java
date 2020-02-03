@@ -39,16 +39,14 @@ public class Main {
 	public static final AudioPlayer player = new AudioPlayer();
 	private static final Transcoder transcoder = new Transcoder();
 
-	private static final WaveReactor waveReactor = new WaveReactor(player);
+	private static final LyricsProcessor lyricsProcessor = new LyricsProcessor(player);
+
+	private static final WaveReactor waveReactor = new WaveReactor(player, lyricsProcessor);
 
 	private static final IntervalUpdater intervalUpdater = new IntervalUpdater();
 	private static final TimerService timerService = new TimerService(intervalUpdater);
 
-	private static final LyricsProcessor lyricsProcessor = new LyricsProcessor(player);
-
-	private static final OutputSequencer outputSequencer = new OutputSequencer();
-
-	private static final JPanel previewPanel = new JPanel();
+	private static final OutputSequencer outputSequencer = new OutputSequencer(lyricsProcessor, player);
 
 	public static void main(String args[]) {
 		log.debug("Starting karaoke sync program.");
@@ -104,7 +102,12 @@ public class Main {
 		displayScrollPane.setPreferredSize(new Dimension(250, 250));
 		displayScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
-		JSplitPane rightSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, displayScrollPane, previewPanel);
+		JScrollPane previewScrollPane = new JScrollPane(lyricsProcessor.getPreviewPanel());
+		previewScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+		previewScrollPane.setPreferredSize(new Dimension(250, 250));
+		previewScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+
+		JSplitPane rightSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, displayScrollPane, previewScrollPane);
 		rightSplitPane.setContinuousLayout(true);
 
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, lyricsInputPanel, rightSplitPane);
@@ -253,8 +256,7 @@ public class Main {
 				progressDialog.setSize(300, 75);
 				progressDialog.setLocationRelativeTo(frame);
 
-				outputSequencer.export(lyricsProcessor, player,
-						new SequencerProgressChecker(progressDialog, dialogProgressBar));
+				outputSequencer.export(new SequencerProgressChecker(progressDialog, dialogProgressBar));
 				progressDialog.setVisible(true);
 			}
 		});
@@ -531,6 +533,7 @@ public class Main {
 		stop.addActionListener(ev -> {
 			player.stop();
 			waveFormPane.stop();
+			lyricsProcessor.setPlaybackPosition(0);
 		});
 
 		nudgeLeft.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), false, true));
@@ -586,15 +589,19 @@ public class Main {
 
 	private static class WaveReactor implements WaveListener {
 		private AudioPlayer audioPlayer;
+		private LyricsProcessor processor;
 
-		public WaveReactor(AudioPlayer audioPlayer) {
+		public WaveReactor(AudioPlayer audioPlayer, LyricsProcessor processor) {
 			this.audioPlayer = audioPlayer;
+			this.processor = processor;
 		}
 
 		@Override
 		public void setCurrentPosition(double x, double width) {
 			System.out.println(x);
 			audioPlayer.setPosition(x / width);
+
+			processor.setPlaybackPosition(audioPlayer.getPlaybackPosition());
 		}
 	}
 
