@@ -26,31 +26,28 @@ public class LyricsProcessor {
 	private final int displayFontSize = 24;
 	private final int outputFontSize = 72;
 
+	// Fonts for editor display and final output.
 	private final Font timingFont = new Font("SansSerif", Font.PLAIN, 8);
-	// Font used to display lyrics in editor.
 	private Font displayFont = new Font("Serif", Font.PLAIN, displayFontSize);
-	// Font used in final output.
 	private Font outputFont = new Font("Serif", Font.PLAIN, outputFontSize);
 
 	private final JPanel displayPanel;
 	private final JPanel previewPanel;
 
-	private String[][] lyrics;
-	private long[][] wordTimestamps;
-
-	// End point after the final word in lyrics.
-	private long finalTimestamp;
-
 	private JLabel[][] labels;
 	private JLabel[][] previewLabels;
 	private JLabel[][] timeLabels;
 
-	private int phraseIndex, wordIndex;
+	private String[][] lyrics;
+	private long[][] wordTimestamps;
 
+	private int phraseIndex, wordIndex;
 	private int previewPhrase, previewWord;
 	private int nextPreviewPhrase, nextPreviewWord;
 
 	private IndexSelectListener indexSelectListener;
+	
+	private int splitOptionValue = 0;
 
 	public LyricsProcessor(IndexSelectListener indexSelectListener) {
 		this.indexSelectListener = indexSelectListener;
@@ -65,36 +62,47 @@ public class LyricsProcessor {
 	public void loadLyrics(String lyricsStr, String splitOption) {
 		log.debug("Lyrics processor loading lyrics with split option: " + splitOption);
 
+		// Split by newline.
 		String[] phrases = lyricsStr.split("[\\r\\n]+");
 
 		lyrics = new String[phrases.length][];
 		wordTimestamps = new long[phrases.length][];
+
 		labels = new JLabel[phrases.length][];
 		previewLabels = new JLabel[phrases.length][];
+
 		timeLabels = new JLabel[phrases.length][];
 
+		// Single element array for the end of every phrase.
 		String[] singleElement = new String[] { "" };
 		for (int i = 0; i < phrases.length; i++) {
+			phrases[i] = phrases[i].strip();
+			
 			String[] tempArray;
 			if (splitOption.equals("Word")) {
 				tempArray = phrases[i].split("\\s+");
+				splitOptionValue = 0;
 			} else if (splitOption.equals("Phrase")) {
 				tempArray = new String[] { phrases[i] };
+				splitOptionValue = 1;
 			} else {
 				String p = phrases[i].replaceAll("\\s+", "");
 				tempArray = p.split("");
+				splitOptionValue = 2;
 			}
 			lyrics[i] = Stream.concat(Arrays.stream(tempArray), Arrays.stream(singleElement)).toArray(String[]::new);
 
-			wordTimestamps[i] = new long[lyrics[i].length];
-			labels[i] = new JLabel[lyrics[i].length];
-			previewLabels[i] = new JLabel[lyrics[i].length];
-			timeLabels[i] = new JLabel[lyrics[i].length];
-		}
+			int phraseLength = lyrics[i].length;
+			wordTimestamps[i] = new long[phraseLength];
 
+			labels[i] = new JLabel[phraseLength];
+			previewLabels[i] = new JLabel[phraseLength];
+			timeLabels[i] = new JLabel[phraseLength];
+
+			Arrays.fill(wordTimestamps[i], -1);
+		}
 		setUpPanel();
 		resetAllSyncMarkers();
-
 	}
 
 	public void loadFont(Font font) {
@@ -129,6 +137,10 @@ public class LyricsProcessor {
 				wordPanel.setLayout(new BoxLayout(wordPanel, BoxLayout.PAGE_AXIS));
 
 				JLabel wordLabel = new JLabel(phraseArr[j]);
+				if (j == phraseArr.length - 1) {
+					wordLabel.setText("<END>");
+				}
+
 				wordLabel.setFont(displayFont);
 				wordLabel.setOpaque(true);
 
@@ -162,7 +174,7 @@ public class LyricsProcessor {
 
 					@Override
 					public void mouseClicked(MouseEvent e) {
-						setCurrentIndex(pIndex, wIndex);
+						updateCurrentIndex(pIndex, wIndex);
 
 						// Double click.
 						if (e.getClickCount() == 2) {
@@ -212,57 +224,6 @@ public class LyricsProcessor {
 		previewPanel.repaint();
 	}
 
-	private void setCurrentIndex(int pIndex, int wIndex) {
-		if (wordTimestamps == null || lyrics == null || labels == null) {
-			System.err.println("wordTimestamps, lyrics, or labels is null.");
-			return;
-		}
-
-		if (pIndex < 0 || wIndex < 0) {
-			return;
-		}
-
-		// Re-color current index.
-		if (wordTimestamps[phraseIndex][wordIndex] > 0) {
-			labels[phraseIndex][wordIndex].setBackground(doneColor);
-		} else {
-			labels[phraseIndex][wordIndex].setBackground(normalColor);
-		}
-
-		this.phraseIndex = pIndex;
-		this.wordIndex = wIndex;
-
-		System.out.println("indicies: " + phraseIndex + " " + wordIndex);
-
-		labels[phraseIndex][wordIndex].setBackground(currentColor);
-	}
-
-	public void setTimestampForCurrentWordAndMoveToNext(long microseconds) {
-		setTimestampForCurrentWord(microseconds);
-
-		int[] nextPair = getNextIndexPair(phraseIndex, wordIndex, wordTimestamps);
-		setCurrentIndex(nextPair[0], nextPair[1]);
-	}
-
-	private void setTimestampForCurrentWord(long microseconds) {
-		if (wordTimestamps == null || lyrics == null || labels == null) {
-			System.err.println("wordTimestamps, lyrics, or labels is null.");
-			return;
-		}
-
-		if (wordIndex < 0 || phraseIndex < 0) {
-			finalTimestamp = microseconds;
-			return;
-		}
-
-		wordTimestamps[phraseIndex][wordIndex] = microseconds;
-
-		labels[phraseIndex][wordIndex].setBackground(doneColor);
-		timeLabels[phraseIndex][wordIndex].setText(formatMicroseconds(microseconds));
-
-		clearAllLess(microseconds);
-	}
-
 	public void resetAllSyncMarkers() {
 		log.debug("Lyrics processor resetting all synchronization markers.");
 
@@ -293,59 +254,23 @@ public class LyricsProcessor {
 		nextPreviewWord = 0;
 	}
 
-	public boolean nudge(String amount, boolean all, boolean left) {
-		log.debug("Lyrics processor nudging by " + amount + " milliseconds, all: " + all + " left: " + left);
+	public void setTimestampForCurrentWordAndMoveToNext(long microseconds) {
+		setTimestampForCurrentWord(microseconds);
 
-		if (wordTimestamps == null || lyrics == null || labels == null) {
-			log.warn("Lyrics processor can't nudge because lyrics is null.");
-			return false;
+		int[] nextPair = getNextIndexPair(phraseIndex, wordIndex, wordTimestamps);
+		if (nextPair[0] >= 0 && nextPair[1] >= 0) {
+			updateCurrentIndex(nextPair[0], nextPair[1]);
 		}
-
-		int nudgeAmount;
-		try {
-			nudgeAmount = Integer.parseInt(amount);
-		} catch (NumberFormatException ex) {
-			ex.printStackTrace();
-			return false;
-		}
-		if (nudgeAmount < 0) {
-			return false;
-		}
-
-		nudgeAmount *= (left ? -1 : 1);
-		// Milliseconds to microseconds.
-		nudgeAmount *= 1000;
-
-		if (all) {
-			// Update the time stamp value of just a single word.
-			for (int i = 0; i < wordTimestamps.length; i++) {
-				for (int j = 0; j < wordTimestamps[i].length; j++) {
-					if (wordTimestamps[i][j] >= 0) {
-						long newTime = wordTimestamps[i][j] + nudgeAmount;
-
-						wordTimestamps[i][j] = newTime;
-						timeLabels[i][j].setText(formatMicroseconds(newTime));
-					}
-				}
-			}
-		} else {
-			if (phraseIndex < 0 || wordIndex < 0) {
-				return false;
-			}
-			// Update the time stamp value of just a single word.
-			long newTime = wordTimestamps[phraseIndex][wordIndex] + nudgeAmount;
-			setTimestampForCurrentWord(newTime);
-			setCurrentIndex(phraseIndex, wordIndex);
-		}
-		return false;
 	}
 
 	// Return pair phraseIndex, wordIndex.
 	public static int[] getNextIndexPair(int pIndex, int wIndex, long[][] timestamps) {
 		if (timestamps == null) {
+			log.warn("Lyrics processor can't get next pair of indices because timestamps is null.");
 			System.err.println("timestamps is null.");
 			return null;
 		}
+
 		if (wIndex == timestamps[pIndex].length - 1) {
 			if (pIndex == timestamps.length - 1) {
 				return new int[] { -1, -1 };
@@ -357,21 +282,42 @@ public class LyricsProcessor {
 		}
 	}
 
-	private String formatMicroseconds(long microseconds) {
-		Duration d = Duration.ofMillis(microseconds / 1000);
-		return String.format("%d:%02d:%03d", d.toMinutesPart(), d.toSecondsPart(), d.toMillisPart());
+	private void updateCurrentIndex(int pIndex, int wIndex) {
+		if (wordTimestamps == null || lyrics == null || labels == null) {
+			System.err.println("wordTimestamps, lyrics, or labels is null.");
+			return;
+		}
+
+		if (pIndex < 0 || wIndex < 0) {
+			return;
+		}
+
+		// Re-color current index.
+		if (wordTimestamps[phraseIndex][wordIndex] >= 0) {
+			labels[phraseIndex][wordIndex].setBackground(doneColor);
+		} else {
+			labels[phraseIndex][wordIndex].setBackground(normalColor);
+		}
+
+		this.phraseIndex = pIndex;
+		this.wordIndex = wIndex;
+
+		labels[phraseIndex][wordIndex].setBackground(currentColor);
+
+		System.out.println("Set current index: " + phraseIndex + " " + wordIndex);
 	}
 
-	public Font getDisplayFont() {
-		return displayFont;
-	}
+	private void setTimestampForCurrentWord(long microseconds) {
+		if (wordTimestamps == null || lyrics == null || labels == null) {
+			System.err.println("wordTimestamps, lyrics, or labels is null.");
+			return;
+		}
+		wordTimestamps[phraseIndex][wordIndex] = microseconds;
 
-	public Font getOutputFont() {
-		return outputFont;
-	}
+		labels[phraseIndex][wordIndex].setBackground(doneColor);
+		timeLabels[phraseIndex][wordIndex].setText(formatMicroseconds(microseconds));
 
-	public interface IndexSelectListener {
-		public void selectedPlaybackPosition(long playbackPosition);
+		clearAllLess(microseconds);
 	}
 
 	private void clearAllLess(long playbackPosition) {
@@ -405,73 +351,16 @@ public class LyricsProcessor {
 		}
 	}
 
-	public String[][] getLyrics() {
-		return lyrics;
-	}
-
-	public long[][] getTimestamps() {
-		return wordTimestamps;
-	}
-
-	public long getFinalTimestamp() {
-		return finalTimestamp;
-	}
-
-	public JPanel getDisplayPanel() {
-		return displayPanel;
-	}
-
-	public JPanel getPreviewPanel() {
-		return previewPanel;
-	}
-
-	public void update(long playbackPosition) {
-		if (wordTimestamps == null || lyrics == null || labels == null) {
-			return;
-		}
-
-		if (nextPreviewPhrase < 0 || nextPreviewWord < 0) {
-			return;
-		}
-
-		long nextTime = wordTimestamps[nextPreviewPhrase][nextPreviewWord];
-		if (nextTime >= 0 && playbackPosition > nextTime) {
-			if (previewPhrase >= 0) {
-				previewLabels[previewPhrase][previewWord].setBackground(normalColor);
-			}
-			previewLabels[nextPreviewPhrase][nextPreviewWord].setBackground(currentColor);
-
-			previewPhrase = nextPreviewPhrase;
-			previewWord = nextPreviewWord;
-
-			int[] nPair = getNextPair(previewPhrase, previewWord, wordTimestamps);
-			nextPreviewPhrase = nPair[0];
-			nextPreviewWord = nPair[1];
-
-			System.out.println("Update playback preview phrase: " + previewPhrase + " preview word: " + previewWord
-					+ " next phrase: " + nextPreviewPhrase + " next word: " + nextPreviewWord);
-		}
-	}
-
-	private int[] getNextPair(int pIndex, int wIndex, long[][] wordTimestamps) {
-		if (pIndex < 0 || wIndex < 0) {
-			return new int[] { 0, 0 };
-		}
-
+	public static int[] getNextPairWithTimestampSet(int pIndex, int wIndex, long[][] wordTimestamps) {
 		while (true) {
 			int[] nextPair = getNextIndexPair(pIndex, wIndex, wordTimestamps);
 
-			if (pIndex < 0 || wIndex < 0) {
-				return nextPair;
-			}
-
-			long timestamp = wordTimestamps[pIndex][wIndex];
-			if (timestamp >= 0) {
-				return nextPair;
-			}
-
 			pIndex = nextPair[0];
 			wIndex = nextPair[1];
+
+			if (pIndex < 0 || wIndex < 0 || wordTimestamps[pIndex][wIndex] >= 0) {
+				return nextPair;
+			}
 		}
 	}
 
@@ -483,16 +372,19 @@ public class LyricsProcessor {
 
 		int[] result = findIndexGivenPosition(playbackPosition);
 		if (result == null) {
+			System.out.println("Lyrics processor can't find playback positions");
 			log.warn("Lyrics processor can't find playback positions");
+			return;
 		}
 		previewPhrase = result[0];
 		previewWord = result[1];
 
+		// If preview phrase and word are negative, reset next to by (0, 0).
 		if (previewPhrase < 0 || previewWord < 0) {
 			nextPreviewPhrase = 0;
 			nextPreviewWord = 0;
 		} else {
-			int[] nPair = getNextPair(previewPhrase, previewWord, wordTimestamps);
+			int[] nPair = getNextPairWithTimestampSet(previewPhrase, previewWord, wordTimestamps);
 			nextPreviewPhrase = nPair[0];
 			nextPreviewWord = nPair[1];
 		}
@@ -507,19 +399,150 @@ public class LyricsProcessor {
 			return null;
 		}
 
-		int p = -1;
-		int w = -1;
+		int lastSetPhrase = -1;
+		int lastSetWord = -1;
 
 		for (int i = 0; i < wordTimestamps.length; i++) {
 			for (int j = 0; j < wordTimestamps[i].length; j++) {
-				if (wordTimestamps[i][j] >= 0 && wordTimestamps[i][j] > playbackPosition) {
-					return new int[] { p, w };
+				if (wordTimestamps[i][j] >= 0) {
+					if (wordTimestamps[i][j] > playbackPosition) {
+						return new int[] { lastSetPhrase, lastSetWord };
+					} else {
+						lastSetPhrase = i;
+						lastSetWord = j;
+					}
 				}
-				p = i;
-				w = j;
 			}
 		}
+		return new int[] { lastSetPhrase, lastSetWord };
+	}
 
-		return null;
+	// Called ever X milliseconds to update preview play-back.
+	public void update(long playbackPosition) {
+		if (wordTimestamps == null || lyrics == null || labels == null) {
+			return;
+		}
+
+		if (nextPreviewPhrase < 0 || nextPreviewWord < 0) {
+			return;
+		}
+
+		long nextTime = wordTimestamps[nextPreviewPhrase][nextPreviewWord];
+		if (playbackPosition > nextTime) {
+			if (previewPhrase >= 0) {
+				previewLabels[previewPhrase][previewWord].setBackground(normalColor);
+			}
+			previewLabels[nextPreviewPhrase][nextPreviewWord].setBackground(currentColor);
+
+			previewPhrase = nextPreviewPhrase;
+			previewWord = nextPreviewWord;
+
+			int[] nPair = getNextPairWithTimestampSet(previewPhrase, previewWord, wordTimestamps);
+			nextPreviewPhrase = nPair[0];
+			nextPreviewWord = nPair[1];
+
+			System.out.println("Update playback preview phrase: " + previewPhrase + " preview word: " + previewWord
+					+ " next phrase: " + nextPreviewPhrase + " next word: " + nextPreviewWord);
+		}
+	}
+
+	public void nudge(String amount, boolean all, boolean left) {
+		log.debug("Lyrics processor nudging by " + amount + " milliseconds, all: " + all + " left: " + left);
+
+		if (wordTimestamps == null || lyrics == null || labels == null) {
+			log.warn("Lyrics processor can't nudge because lyrics is null.");
+			return;
+		}
+
+		int nudgeAmount;
+		try {
+			nudgeAmount = Integer.parseInt(amount);
+		} catch (NumberFormatException ex) {
+			ex.printStackTrace();
+			log.error("Lyrics processor can't parse nudge amount: " + amount + " to an integer.");
+			log.error(ex);
+			return;
+		}
+		if (nudgeAmount < 0) {
+			log.error("Lyrics processor can't nudge a negative amount: " + nudgeAmount);
+			return;
+		}
+
+		// Milliseconds to microseconds and correct nudge direction.
+		nudgeAmount *= (left ? -1 : 1) * 1000;
+
+		if (all) {
+			// Update the time stamp value of all words.
+			for (int i = 0; i < wordTimestamps.length; i++) {
+				for (int j = 0; j < wordTimestamps[i].length; j++) {
+					if (wordTimestamps[i][j] >= 0) {
+						long newTime = wordTimestamps[i][j] + nudgeAmount;
+
+						if (newTime < 0) {
+							wordTimestamps[i][j] = -1;
+							timeLabels[i][j].setText("");
+
+							if (i != phraseIndex || j != wordIndex) {
+								labels[i][j].setBackground(normalColor);
+							}
+						} else {
+							wordTimestamps[i][j] = newTime;
+							timeLabels[i][j].setText(formatMicroseconds(newTime));
+						}
+					}
+				}
+			}
+		} else {
+			if (phraseIndex < 0 || wordIndex < 0) {
+				return;
+			}
+
+			if (wordTimestamps[phraseIndex][wordIndex] < 0
+					|| wordTimestamps[phraseIndex][wordIndex] + nudgeAmount < 0) {
+				return;
+			}
+
+			// Update the time stamp value of just a single word.
+			long newTime = wordTimestamps[phraseIndex][wordIndex] + nudgeAmount;
+			setTimestampForCurrentWord(newTime);
+		}
+		return;
+	}
+
+	private static String formatMicroseconds(long microseconds) {
+		Duration d = Duration.ofMillis(microseconds / 1000);
+		return String.format("%d:%02d:%03d", d.toMinutesPart(), d.toSecondsPart(), d.toMillisPart());
+	}
+
+	public interface IndexSelectListener {
+		public void selectedPlaybackPosition(long playbackPosition);
+	}
+
+	public Font getDisplayFont() {
+		return displayFont;
+	}
+
+	public Font getOutputFont() {
+		return outputFont;
+	}
+
+	public String[][] getLyrics() {
+		return lyrics;
+	}
+
+	public long[][] getTimestamps() {
+		return wordTimestamps;
+	}
+
+	public JPanel getDisplayPanel() {
+		return displayPanel;
+	}
+
+	public JPanel getPreviewPanel() {
+		return previewPanel;
+	}
+	
+	public int getSplitOption() {
+		return splitOptionValue;
 	}
 }

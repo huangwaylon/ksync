@@ -246,18 +246,26 @@ public class Main {
 			public void actionPerformed(ActionEvent e) {
 				System.out.println("Export");
 
-				JProgressBar dialogProgressBar = new JProgressBar(0, 100);
-				dialogProgressBar.setIndeterminate(false);
+				JFileChooser j = new JFileChooser(FileSystemView.getFileSystemView().getHomeDirectory());
+				j.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+				j.setDialogTitle("Select output directory to export to.");
 
-				JDialog progressDialog = new JDialog(frame, "Export progress", true);
-				progressDialog.add(BorderLayout.CENTER, dialogProgressBar);
-				progressDialog.add(BorderLayout.NORTH, new JLabel("Exporting..."));
-				progressDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-				progressDialog.setSize(300, 75);
-				progressDialog.setLocationRelativeTo(frame);
+				if (j.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION) {
+					String filePath = j.getSelectedFile().getAbsolutePath();
 
-				outputSequencer.export(new SequencerProgressChecker(progressDialog, dialogProgressBar));
-				progressDialog.setVisible(true);
+					JProgressBar dialogProgressBar = new JProgressBar(0, 100);
+					dialogProgressBar.setIndeterminate(false);
+
+					JDialog progressDialog = new JDialog(frame, "Export progress", true);
+					progressDialog.add(BorderLayout.CENTER, dialogProgressBar);
+					progressDialog.add(BorderLayout.NORTH, new JLabel("Exporting..."));
+					progressDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+					progressDialog.setSize(300, 75);
+					progressDialog.setLocationRelativeTo(frame);
+
+					outputSequencer.export(new SequencerProgressChecker(progressDialog, dialogProgressBar), filePath);
+					progressDialog.setVisible(true);
+				}
 			}
 		});
 
@@ -301,8 +309,7 @@ public class Main {
 							int newWidth = Integer.parseInt(widthTextField.getText());
 							int newHeight = Integer.parseInt(heightTextField.getText());
 
-							outputSequencer.setWidth(newWidth);
-							outputSequencer.setHeight(newHeight);
+							outputSequencer.setWidthAndHeight(newWidth, newHeight);
 
 							log.debug("Set width and height to " + newWidth + " " + newHeight);
 						} catch (NumberFormatException ex) {
@@ -369,11 +376,11 @@ public class Main {
 				highlightOutlineColor.setOpaque(true);
 				backgroundColor.setOpaque(true);
 
-				normalColor.setBackground(outputSequencer.getNormal());
-				outlineColor.setBackground(outputSequencer.getOutline());
-				highlightColor.setBackground(outputSequencer.getHighlight());
-				highlightOutlineColor.setBackground(outputSequencer.getHighlightOutline());
-				backgroundColor.setBackground(outputSequencer.getBackground());
+				normalColor.setBackground(outputSequencer.getColorGroup().getNormal());
+				outlineColor.setBackground(outputSequencer.getColorGroup().getOutline());
+				highlightColor.setBackground(outputSequencer.getColorGroup().getHighlight());
+				highlightOutlineColor.setBackground(outputSequencer.getColorGroup().getHighlightOutline());
+				backgroundColor.setBackground(outputSequencer.getColorGroup().getBackground());
 
 				normalColor.setForeground(Color.DARK_GRAY);
 				outlineColor.setForeground(Color.DARK_GRAY);
@@ -386,7 +393,7 @@ public class Main {
 							normalColor.getBackground());
 					if (newColor != null) {
 						normalColor.setBackground(newColor);
-						outputSequencer.setNormal(newColor);
+						outputSequencer.getColorGroup().setNormal(newColor);
 					}
 				});
 
@@ -395,7 +402,7 @@ public class Main {
 							outlineColor.getBackground());
 					if (newColor != null) {
 						outlineColor.setBackground(newColor);
-						outputSequencer.setOutline(newColor);
+						outputSequencer.getColorGroup().setOutline(newColor);
 					}
 				});
 
@@ -404,7 +411,7 @@ public class Main {
 							highlightColor.getBackground());
 					if (newColor != null) {
 						highlightColor.setBackground(newColor);
-						outputSequencer.setHighlight(newColor);
+						outputSequencer.getColorGroup().setHighlight(newColor);
 					}
 				});
 
@@ -413,7 +420,7 @@ public class Main {
 							highlightOutlineColor.getBackground());
 					if (newColor != null) {
 						highlightOutlineColor.setBackground(newColor);
-						outputSequencer.setHighlightOutline(newColor);
+						outputSequencer.getColorGroup().setHighlightOutline(newColor);
 					}
 				});
 
@@ -422,7 +429,7 @@ public class Main {
 							backgroundColor.getBackground());
 					if (newColor != null) {
 						backgroundColor.setBackground(newColor);
-						outputSequencer.setBackground(newColor);
+						outputSequencer.getColorGroup().setBackground(newColor);
 					}
 				});
 
@@ -494,6 +501,28 @@ public class Main {
 			}
 		});
 
+		JMenuItem mPadding = new JMenuItem(new AbstractAction("Side padding") {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				String s = (String) JOptionPane.showInputDialog(frame,
+						"Side padding for text (please input an integer)", "" + ChineseSequencer.leftAlignPadding);
+
+				if ((s != null) && (s.length() > 0)) {
+					try {
+						ChineseSequencer.leftAlignPadding = Integer.parseInt(s);
+						log.debug("Set side padding amount to " + ChineseSequencer.leftAlignPadding);
+						System.out.println("Set side padding amount to " + ChineseSequencer.leftAlignPadding);
+					} catch (NumberFormatException ex) {
+						ex.printStackTrace();
+						log.error("Could not parse " + s + " into an integer to set side padding.");
+						log.error(ex);
+					}
+				}
+			}
+		});
+
 		mEdit.add(mDimensions);
 		mEdit.add(new JSeparator());
 		mEdit.add(mFPS);
@@ -503,6 +532,7 @@ public class Main {
 		mEdit.add(mColors);
 		mEdit.add(new JSeparator());
 		mEdit.add(mLines);
+		mEdit.add(mPadding);
 
 		frame.getContentPane().add(BorderLayout.NORTH, menuBar);
 		frame.getContentPane().add(mainPanel);

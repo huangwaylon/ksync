@@ -8,8 +8,6 @@ import java.awt.image.BufferedImage;
 
 import org.apache.log4j.Logger;
 
-import karaoke.OutputSequencer.ColorGroup;
-
 public class MultiLineSequencer {
 	public static Logger log = Logger.getLogger(Main.class);
 

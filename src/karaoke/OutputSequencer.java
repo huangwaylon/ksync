@@ -1,12 +1,11 @@
 package karaoke;
 
-import java.awt.Color;
-import java.awt.FontMetrics;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -20,64 +19,39 @@ import org.jcodec.common.tools.MainUtils;
 public class OutputSequencer {
 	public static Logger log = Logger.getLogger(Main.class);
 
-	private static final int leftAlignPadding = 10;
-
 	private int width = 1920, height = 1080;
 	private String fps = "30:1";
 	private String alignment = "Center";
 	private int framesPerSecond = 30;
 	private String numberOfLines = "2";
 
-	private boolean centerAligned = true;
-
-	private Color normal = Color.white, outline = Color.black, highlight = Color.blue, highlightOutline = Color.white,
-			background = Color.green;
+	private ColorGroup colorGroup = new ColorGroup();
 
 	private LyricsProcessor lyricsProcessor;
 	private AudioPlayer player;
 
+	private boolean centerAligned;
+
+	ChineseSequencer chineseSequencer;
+
 	public OutputSequencer(LyricsProcessor lyricsProcessor, AudioPlayer player) {
 		this.lyricsProcessor = lyricsProcessor;
 		this.player = player;
+
+		chineseSequencer = new ChineseSequencer(width, height, lyricsProcessor.getOutputFont());
 	}
 
-	public void setWidth(int width) {
-		this.width = width;
-	}
-
-	public void setHeight(int height) {
-		this.height = height;
-	}
-
-	public void setFPS(String fps) {
-		log.debug("Output sequencer set FPS: " + fps);
-
-		this.fps = fps;
-		if (fps.equals("30:1")) {
-			framesPerSecond = 30;
-		} else if (fps.equals("60:1")) {
-			framesPerSecond = 60;
-		} else if (fps.equals("24:1")) {
-			framesPerSecond = 24;
-		} else if (fps.equals("12:1")) {
-			framesPerSecond = 12;
-		} else if (fps.equals("15:1")) {
-			framesPerSecond = 15;
-		} else {
-			framesPerSecond = 25;
-		}
-		System.out.println("Set FPS: " + fps + " framesPerSecond: " + framesPerSecond);
-	}
-
-	public void export(SequencerListener listener) {
+	public void export(SequencerListener listener, String outputDirectory) {
 		log.debug("Output sequencer starting export.");
 
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		executor.submit(() -> {
-			log.debug("Output sequencer starting thread: " + Thread.currentThread().getName());
-			System.out.println("starting thread " + Thread.currentThread().getName());
+			log.debug("Output sequencer starting thread: " + Thread.currentThread().getName() + " and exporting to: "
+					+ outputDirectory);
+			System.out.println(
+					"starting thread " + Thread.currentThread().getName() + " and exporting to: " + outputDirectory);
 			try {
-				sequence(lyricsProcessor, player, listener);
+				sequence(outputDirectory, lyricsProcessor, player, listener);
 			} catch (IOException ex) {
 				ex.printStackTrace();
 			}
@@ -85,156 +59,98 @@ public class OutputSequencer {
 		});
 	}
 
-	public void sequence(LyricsProcessor lyricsProcessor, AudioPlayer player, SequencerListener listener)
-			throws IOException {
-		FileChannelWrapper out = NIOUtils.writableChannel(MainUtils.tildeExpand("~/out.mp4"));
+	public void sequence(String outputDirectory, LyricsProcessor lyricsProcessor, AudioPlayer player,
+			SequencerListener listener) throws IOException {
+		long start = System.currentTimeMillis();
+
+		String date = new SimpleDateFormat("yyyyMMdd_HH_mm_ss").format(new Date());
+		String outputPath = Paths.get(outputDirectory, String.format("karaoke_output_%s.mp4", date)).toString();
+		FileChannelWrapper out = NIOUtils.writableChannel(MainUtils.tildeExpand(outputPath));
 		AWTSequenceEncoder encoder = new AWTSequenceEncoder(out, Rational.parse(fps));
 
-		RenderingHints renderingHints = new RenderingHints(RenderingHints.KEY_TEXT_ANTIALIASING,
-				RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-		// Background components.
-		BufferedImage backgroundBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D backgroundGraphics = backgroundBufferedImage.createGraphics();
-		backgroundGraphics.setRenderingHints(renderingHints);
-		backgroundGraphics.setFont(lyricsProcessor.getOutputFont());
-
-		// Foreground components.
-		BufferedImage foregroundBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D foregroundGraphics = foregroundBufferedImage.createGraphics();
-		foregroundGraphics.setRenderingHints(renderingHints);
-		foregroundGraphics.setFont(lyricsProcessor.getOutputFont());
-		foregroundGraphics.setPaint(highlight);
-
-		// Second line components
-		BufferedImage secondBufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D secondGraphics = secondBufferedImage.createGraphics();
-		secondGraphics.setRenderingHints(renderingHints);
-		secondGraphics.setFont(lyricsProcessor.getOutputFont());
-		secondGraphics.setPaint(normal);
-
-		// Final image components.
-		BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		Graphics finalGraphics = finalImage.getGraphics();
-
-		long audioLength = player.getLength();
-		int totalFrames = (int) Math.ceil((audioLength * framesPerSecond) / 1e6);
-
-		int phraseIndex = -1, wordIndex = -1;
-		int nextPhraseIndex = 0, nextWordIndex = 0;
-
+		int totalFrames = (int) Math.ceil((player.getLength() * framesPerSecond) / 1.0e6);
 		double microsecondsPerFrame = 1.0e6 / framesPerSecond;
 
 		String[][] lyrics = lyricsProcessor.getLyrics();
 		long[][] wordTimestamps = lyricsProcessor.getTimestamps();
 
-		// Computed for the current phrase.
-		FontMetrics fontMetrics = backgroundGraphics.getFontMetrics();
-		String phrase = "";
-		String nextPhrase = "";
+		int phraseIndex = -1, wordIndex = -1;
+		int nextPhraseIndex = 0, nextWordIndex = 0;
 
-		int spaceWidth = fontMetrics.stringWidth(" ");
-		int wordWidth = 0;
-		int totalWidthSoFar = 0;
-
-		int phraseHeight = fontMetrics.getAscent();
-		int phraseWidth = spaceWidth;
-		int nextPhraseWidth = spaceWidth;
+		String currentPhrase = "";
+		String followingPhrase = "";
 
 		// Computed for the current word.
 		int widthPerFrame = 0;
-		int frames = 0;
+		int framesForWord = 0;
+
+		String delimiter = lyricsProcessor.getSplitOption() == 0 ? " " : "";
 
 		// Initial next time stamp is that of the first word.
-		long nextTimestamp = wordTimestamps[nextPhraseIndex][nextWordIndex];
+		long nextTimestamp = wordTimestamps[0][0];
 
-		long start = System.currentTimeMillis();
-
-		System.out.println("Sequence with audioLength: " + audioLength + " with FPS: " + framesPerSecond
-				+ " with frames: " + totalFrames);
-
-		System.out.println("nextTimestamp: " + nextTimestamp + " spaceWidth: " + spaceWidth);
+		System.out.println("Sequence with audioLength: " + player.getLength() + " with FPS: " + framesPerSecond
+				+ " with frames: " + totalFrames + " nextTimestamp: " + nextTimestamp);
 
 		for (int i = 0; i < totalFrames; i++) {
 			System.out.println("Frame number: " + i);
 			double totalTimeSoFar = microsecondsPerFrame * i;
 
 			// Check if we've moved onto the next element.
-			if (totalTimeSoFar > nextTimestamp) {
-				// Check if we've reached the end of our lyrics lists.
-				if (nextPhraseIndex < 0 || nextWordIndex < 0) {
-					phrase = "";
-					phraseWidth = 1;
-
-					nextTimestamp = player.getLength();
-					break;
-				}
-				int lastP = phraseIndex;
-
+			if (totalTimeSoFar >= nextTimestamp) {
+				int lastPhraseIndex = phraseIndex;
 				phraseIndex = nextPhraseIndex;
 				wordIndex = nextWordIndex;
 
-				long currTimestamp = wordTimestamps[phraseIndex][wordIndex];
-
 				// Check to see if we've moved onto a new phrase.
-				if (phraseIndex > lastP) {
-					phrase = String.join(" ", lyrics[phraseIndex]);
-					totalWidthSoFar = 0;
-
-					phraseWidth = fontMetrics.stringWidth(phrase);
+				if (phraseIndex > lastPhraseIndex) {
+					currentPhrase = String.join(delimiter, lyrics[phraseIndex]);
 				}
 
-				String currentWord = lyrics[phraseIndex][wordIndex];
-				wordWidth = fontMetrics.stringWidth(currentWord);
-				totalWidthSoFar += wordWidth + (wordIndex == 0 ? 0 : spaceWidth);
-
-				System.out.print("get next pair");
-				int[] nextPair = getNextPair(phraseIndex, wordIndex, wordTimestamps);
+				// Now check for the next phrase.
+				int[] nextPair = LyricsProcessor.getNextPairWithTimestampSet(phraseIndex, wordIndex, wordTimestamps);
 				nextPhraseIndex = nextPair[0];
 				nextWordIndex = nextPair[1];
-				System.out.println(" done");
 
-				// If there is no phrase and word index available, use the final time stamp.
+				// If there is no phrase and word index available, fix final phrase.
 				if (nextPhraseIndex < 0 || nextWordIndex < 0) {
-					long finalTimestamp = lyricsProcessor.getFinalTimestamp();
-					if (finalTimestamp < 0) {
-						nextTimestamp = player.getLength();
-					} else {
-						nextTimestamp = finalTimestamp;
+					System.out.println("Final reached");
+					nextTimestamp = Long.MAX_VALUE;
+					followingPhrase = "";
+
+					currentPhrase = "";
+					widthPerFrame = 0;
+				} else {
+					if (phraseIndex == lyrics.length - 1) { // hack for phrase.
+						followingPhrase = "";
+					} else if (phraseIndex > lastPhraseIndex) { // Moved onto new phrase?
+						followingPhrase = String.join(delimiter, lyrics[phraseIndex + 1]);
 					}
-				} else {
 					nextTimestamp = wordTimestamps[nextPhraseIndex][nextWordIndex];
+					long timeDiff = nextTimestamp - wordTimestamps[phraseIndex][wordIndex];
+					int wordWidth = chineseSequencer.stringWidth(lyrics[phraseIndex][wordIndex]);
+					widthPerFrame = (int) Math.round(wordWidth / (timeDiff / microsecondsPerFrame));
 				}
-
-				if (phraseIndex + 1 < lyrics.length) {
-					nextPhrase = String.join(" ", lyrics[phraseIndex + 1]);
-					nextPhraseWidth = fontMetrics.stringWidth(nextPhrase);
-				} else {
-					nextPhrase = "";
-				}
-
-				long timeDiff = nextTimestamp - currTimestamp;
-				widthPerFrame = (int) Math.round(wordWidth / (timeDiff / microsecondsPerFrame));
 
 				// Reset frames for this word.
-				frames = 0;
+				framesForWord = 0;
 
-				System.out.println("currentWord: " + currentWord + " totalWidthSoFar: " + totalWidthSoFar
-						+ " widthPerFrame: " + widthPerFrame);
+				System.out
+						.println("currentWord: " + lyrics[phraseIndex][wordIndex] + " widthPerFrame: " + widthPerFrame);
 			}
 
-			int width = widthPerFrame * frames + totalWidthSoFar - wordWidth;
-			if (width <= 0) {
-				width = 1;
+			int subPhraseWidth = 0;
+			if (phraseIndex >= 0 && wordIndex > 0 && nextTimestamp != Long.MAX_VALUE) { // hack for last word.
+				String subPhrase = String.join("", Arrays.asList(lyrics[phraseIndex]).subList(0, wordIndex));
+				subPhraseWidth = chineseSequencer.stringWidth(subPhrase)
+						+ wordIndex * chineseSequencer.stringWidth(delimiter);
 			}
 
-			genImage(i, phrase, nextPhrase, backgroundGraphics, foregroundGraphics, secondGraphics, finalGraphics,
-					backgroundBufferedImage, foregroundBufferedImage, secondBufferedImage, finalImage, phraseWidth,
-					nextPhraseWidth, phraseHeight, width);
-			encoder.encodeImage(finalImage);
+			int width = widthPerFrame * framesForWord + subPhraseWidth;
 
-			frames += 1;
+			encoder.encodeImage(chineseSequencer.draw(currentPhrase, followingPhrase, width, colorGroup));
 
+			framesForWord += 1;
 			listener.setProgress((double) i / totalFrames);
 		}
 		System.out.println("Done sequencing!");
@@ -244,98 +160,12 @@ public class OutputSequencer {
 		NIOUtils.closeQuietly(out);
 	}
 
-	// Keep searching for a non-negative time stamp until one is found, else return
-	// -1, -1.
-	private int[] getNextPair(int pIndex, int wIndex, long[][] wordTimestamps) {
-		while (true) {
-			int[] nextPair = LyricsProcessor.getNextIndexPair(pIndex, wIndex, wordTimestamps);
-
-			if (pIndex < 0 || wIndex < 0) {
-				return nextPair;
-			}
-
-			long timestamp = wordTimestamps[pIndex][wIndex];
-			if (timestamp >= 0) {
-				return nextPair;
-			}
-
-			pIndex = nextPair[0];
-			wIndex = nextPair[1];
-		}
-	}
-
-	private void genImage(int imageNum, String phrase, String nextPhrase, Graphics2D backgroundGraphics,
-			Graphics2D foregroundGraphics, Graphics2D secondGraphics, Graphics finalGraphics,
-			BufferedImage backgroundBufferedImage, BufferedImage foregroundBufferedImage,
-			BufferedImage secondBufferedImage, BufferedImage finalImage, int phraseWidth, int nextPhraseWidth,
-			int phraseHeight, int phraseFractionWidth) {
-		// Clear foreground image.
-		foregroundGraphics.setBackground(new Color(255, 255, 255, 0));
-		foregroundGraphics.clearRect(0, 0, width, height);
-
-		// Clear second line image.
-		secondGraphics.setBackground(new Color(255, 255, 255, 0));
-		secondGraphics.clearRect(0, 0, width, height);
-
-		// Fill background image with solid color.
-		backgroundGraphics.setPaint(background);
-		backgroundGraphics.fillRect(0, 0, width, height);
-		backgroundGraphics.setPaint(normal);
-
-		// Align to center.
-		float y = height / 2 + phraseHeight / 4;
-		float x = centerAligned ? (width - phraseWidth) / 2 : leftAlignPadding;
-		float nextX = centerAligned ? (width - nextPhraseWidth) / 2 : leftAlignPadding;
-
-		// Draw the phrase for both layers.
-		backgroundGraphics.drawString(phrase, x, y);
-		foregroundGraphics.drawString(phrase, x, y);
-		secondGraphics.drawString(nextPhrase, nextX, (int) (y + 1.5 * phraseHeight));
-
-		// Cut the foreground slice.
-		BufferedImage foregroundSubImage = foregroundBufferedImage.getSubimage((int) x, (int) y - phraseHeight,
-				phraseFractionWidth, phraseHeight * 2);
-
-		// Combine the two layers.
-		finalGraphics.drawImage(backgroundBufferedImage, 0, 0, null);
-		finalGraphics.drawImage(foregroundSubImage, (int) x, (int) y - phraseHeight, null);
-		finalGraphics.drawImage(secondBufferedImage, 0, 0, null);
-
-		System.out.println("x: " + x + " y: " + y + " phraseFractionWidth: " + phraseFractionWidth);
-
 //		try {
 //			ImageIO.write(finalImage, "PNG",
 //					new File(String.format("/Users/waylonh/Downloads/test/test%08d.png", imageNum)));
 //		} catch (IOException ie) {
 //			ie.printStackTrace();
 //		}
-	}
-
-	public void setNormal(Color normal) {
-		this.normal = normal;
-	}
-
-	public void setOutline(Color outline) {
-		this.outline = outline;
-	}
-
-	public void setHighlight(Color highlight) {
-		this.highlight = highlight;
-	}
-
-	public void setHighlightOutline(Color highlightOutline) {
-		this.highlightOutline = highlightOutline;
-	}
-
-	public void setBackground(Color background) {
-		this.background = background;
-	}
-
-	public interface SequencerListener {
-		public void done();
-
-		public void setProgress(double progress);
-	}
 
 	public int getWidth() {
 		return width;
@@ -359,6 +189,33 @@ public class OutputSequencer {
 		centerAligned = alignment.equals("Center");
 	}
 
+	public void setWidthAndHeight(int width, int height) {
+		this.width = width;
+		this.height = height;
+
+		chineseSequencer = new ChineseSequencer(width, height, lyricsProcessor.getOutputFont());
+	}
+
+	public void setFPS(String fps) {
+		log.debug("Output sequencer set FPS: " + fps);
+
+		this.fps = fps;
+		if (fps.equals("30:1")) {
+			framesPerSecond = 30;
+		} else if (fps.equals("60:1")) {
+			framesPerSecond = 60;
+		} else if (fps.equals("24:1")) {
+			framesPerSecond = 24;
+		} else if (fps.equals("12:1")) {
+			framesPerSecond = 12;
+		} else if (fps.equals("15:1")) {
+			framesPerSecond = 15;
+		} else {
+			framesPerSecond = 25;
+		}
+		System.out.println("Set FPS: " + fps + " framesPerSecond: " + framesPerSecond);
+	}
+
 	public String getNumberOfLines() {
 		return numberOfLines;
 	}
@@ -367,72 +224,17 @@ public class OutputSequencer {
 		this.numberOfLines = numberOfLines;
 	}
 
-	public Color getNormal() {
-		return normal;
+	public ColorGroup getColorGroup() {
+		return colorGroup;
 	}
 
-	public Color getOutline() {
-		return outline;
+	public interface ImageGenerator {
+		public BufferedImage draw(String phrase1, String phrase2, int fraction, ColorGroup colorGroup);
 	}
 
-	public Color getHighlight() {
-		return highlight;
-	}
+	public interface SequencerListener {
+		public void done();
 
-	public Color getHighlightOutline() {
-		return highlightOutline;
-	}
-
-	public Color getBackground() {
-		return background;
-	}
-
-	public static class ColorGroup {
-		private Color normal = Color.white, outline = Color.black, highlight = Color.blue,
-				highlightOutline = Color.white, background = Color.green;
-
-		public void setNormal(Color normal) {
-			this.normal = normal;
-		}
-
-		public void setOutline(Color outline) {
-			this.outline = outline;
-		}
-
-		public void setHighlight(Color highlight) {
-			this.highlight = highlight;
-		}
-
-		public void setHighlightOutline(Color highlightOutline) {
-			this.highlightOutline = highlightOutline;
-		}
-
-		public void setBackground(Color background) {
-			this.background = background;
-		}
-
-		public Color getNormal() {
-			return normal;
-		}
-
-		public Color getOutline() {
-			return outline;
-		}
-
-		public Color getHighlight() {
-			return highlight;
-		}
-
-		public Color getHighlightOutline() {
-			return highlightOutline;
-		}
-
-		public Color getBackground() {
-			return background;
-		}
-	}
-
-	public static interface ImageGenerator {
-		public BufferedImage draw();
+		public void setProgress(double progress);
 	}
 }
