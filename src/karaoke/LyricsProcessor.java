@@ -260,7 +260,7 @@ public class LyricsProcessor {
 		}
 	}
 
-	private void updateCurrentIndex(int pIndex, int wIndex) {
+	public void updateCurrentIndex(int pIndex, int wIndex) {
 		if (wordTimestamps == null || lyrics == null || labels == null) {
 			System.err.println("wordTimestamps, lyrics, or labels is null.");
 			return;
@@ -342,30 +342,6 @@ public class LyricsProcessor {
 		}
 	}
 
-	private int[] findIndexGivenPosition(long playbackPosition) {
-		if (wordTimestamps == null || lyrics == null || labels == null) {
-			log.warn("Lyrics processor can't find index given position because lyrics is null.");
-			return null;
-		}
-
-		int lastSetPhrase = -1;
-		int lastSetWord = -1;
-
-		for (int i = 0; i < wordTimestamps.length; i++) {
-			for (int j = 0; j < wordTimestamps[i].length; j++) {
-				if (wordTimestamps[i][j] >= 0) {
-					if (wordTimestamps[i][j] > playbackPosition) {
-						return new int[] { lastSetPhrase, lastSetWord };
-					} else {
-						lastSetPhrase = i;
-						lastSetWord = j;
-					}
-				}
-			}
-		}
-		return new int[] { lastSetPhrase, lastSetWord };
-	}
-
 	public void nudge(String amount, boolean all, boolean left) {
 		log.debug("Lyrics processor nudging by " + amount + " milliseconds, all: " + all + " left: " + left);
 
@@ -433,11 +409,7 @@ public class LyricsProcessor {
 		Duration d = Duration.ofMillis(microseconds / 1000);
 		return String.format("%d:%02d:%03d", d.toMinutesPart(), d.toSecondsPart(), d.toMillisPart());
 	}
-
-	public interface IndexSelectListener {
-		public void selectedPlaybackPosition(long playbackPosition);
-	}
-
+	
 	public Font getDisplayFont() {
 		return displayFont;
 	}
@@ -468,5 +440,9 @@ public class LyricsProcessor {
 
 	public String delimiter() {
 		return splitOptionValue == 0 ? " " : "";
+	}
+	
+	public interface IndexSelectListener {
+		public void selectedPlaybackPosition(long playbackPosition);
 	}
 }

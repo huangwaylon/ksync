@@ -28,18 +28,14 @@ public class PreviewMaker {
 	public void stop() {
 		isPlaying = false;
 	}
-	
-	public void togglePlay() {
-		if (isPlaying) {
-			isPlaying = false;
-		} else {
-			if (lyricsProcessor.getTimestamps() == null || !checkTimestamps(lyricsProcessor.getTimestamps())) {
-				System.err.println("Check timestamps failed. Every word should have a timestamp.");
-				log.error("Check timestamps failed. Every word should have a timestamp.");
-				return;
-			}
-			isPlaying = true;
+
+	public void play() {
+		if (lyricsProcessor.getTimestamps() == null || !checkTimestamps(lyricsProcessor.getTimestamps())) {
+			System.err.println("Check timestamps failed. Every word should have a timestamp.");
+			log.error("Check timestamps failed. Every word should have a timestamp.");
+			return;
 		}
+		isPlaying = true;
 	}
 
 	private boolean checkTimestamps(long[][] timestamps) {
@@ -118,7 +114,7 @@ public class PreviewMaker {
 		String phrase1, phrase2;
 		int fraction;
 
-		ChineseSequencer chineseSequencer = outputSequencer.chineseSequencer;
+		ChineseSequencer chineseSequencer = outputSequencer.getChineseSequencer();
 
 		if (phraseIndex < 0) {
 			phrase1 = "";

@@ -139,7 +139,6 @@ public class Main {
 		JButton stop = new JButton("Stop");
 		JButton set = new JButton("Set");
 		JButton resetAll = new JButton("Reset All");
-		JButton preview = new JButton("Preview/Pause");
 
 		playbackTimeLabel = new JLabel("0:00/0:00");
 
@@ -157,7 +156,6 @@ public class Main {
 		syncPanel.add(stop);
 		syncPanel.add(set);
 		syncPanel.add(resetAll);
-		syncPanel.add(preview);
 
 		syncPanel.add(nudgeLeft);
 		syncPanel.add(nudgeRight);
@@ -184,10 +182,8 @@ public class Main {
 		JMenuBar menuBar = new JMenuBar();
 		JMenu mFile = new JMenu("File");
 		JMenu mEdit = new JMenu("Edit");
-		JMenu m2 = new JMenu("Help");
 		menuBar.add(mFile);
 		menuBar.add(mEdit);
-		menuBar.add(m2);
 
 		JMenuItem mImportSong = new JMenuItem(new AbstractAction("Import MP3") {
 			private static final long serialVersionUID = 1L;
@@ -265,15 +261,53 @@ public class Main {
 					JProgressBar dialogProgressBar = new JProgressBar(0, 100);
 					dialogProgressBar.setIndeterminate(false);
 
+					JLabel timeLabel = new JLabel();
 					JDialog progressDialog = new JDialog(frame, "Export progress", true);
 					progressDialog.add(BorderLayout.CENTER, dialogProgressBar);
 					progressDialog.add(BorderLayout.NORTH, new JLabel("Exporting..."));
+					progressDialog.add(BorderLayout.SOUTH, timeLabel);
 					progressDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 					progressDialog.setSize(300, 75);
 					progressDialog.setLocationRelativeTo(frame);
 
-					outputSequencer.export(new SequencerProgressChecker(progressDialog, dialogProgressBar), filePath);
+					outputSequencer.export(new SequencerProgressChecker(progressDialog, dialogProgressBar, timeLabel),
+							filePath);
 					progressDialog.setVisible(true);
+
+					progressDialog.addWindowListener(new WindowListener() {
+
+						@Override
+						public void windowOpened(WindowEvent e) {
+						}
+
+						@Override
+						public void windowIconified(WindowEvent e) {
+						}
+
+						@Override
+						public void windowDeiconified(WindowEvent e) {
+						}
+
+						@Override
+						public void windowDeactivated(WindowEvent e) {
+						}
+
+						@Override
+						public void windowClosing(WindowEvent e) {
+							System.out.println("Window closing");
+							outputSequencer.stopExport();
+						}
+
+						@Override
+						public void windowClosed(WindowEvent e) {
+							System.out.println("Window closed");
+							outputSequencer.stopExport();
+						}
+
+						@Override
+						public void windowActivated(WindowEvent e) {
+						}
+					});
 				}
 			}
 		});
@@ -459,22 +493,7 @@ public class Main {
 				dialog.setVisible(true);
 				if (!dialog.isCancelSelected()) {
 					lyricsProcessor.loadFont(dialog.getSelectedFont());
-				}
-			}
-		});
-
-		JMenuItem mAlignment = new JMenuItem(new AbstractAction("Text alignment") {
-			private static final long serialVersionUID = 1L;
-
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				String[] options = new String[] { "Center", "Left" };
-				String selectedValue = (String) JOptionPane.showInputDialog(frame, "Set alignment to",
-						"Video text alignment", JOptionPane.PLAIN_MESSAGE, null, options,
-						outputSequencer.getAlignment());
-
-				if ((selectedValue != null) && (selectedValue.length() > 0)) {
-					outputSequencer.setAlignment(selectedValue);
+					outputSequencer.getChineseSequencer().setFont(dialog.getSelectedFont());
 				}
 			}
 		});
@@ -490,22 +509,6 @@ public class Main {
 
 				if ((selectedValue != null) && (selectedValue.length() > 0)) {
 					outputSequencer.setFPS(selectedValue);
-				}
-			}
-		});
-
-		JMenuItem mLines = new JMenuItem(new AbstractAction("Number of lines") {
-			private static final long serialVersionUID = 1L;
-
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				String[] options = new String[] { "1", "2" };
-				String selectedValue = (String) JOptionPane.showInputDialog(frame, "Set number of lines to",
-						"Number of lines", JOptionPane.PLAIN_MESSAGE, null, options,
-						outputSequencer.getNumberOfLines());
-
-				if ((selectedValue != null) && (selectedValue.length() > 0)) {
-					outputSequencer.setNumberOfLines(selectedValue);
 				}
 			}
 		});
@@ -537,10 +540,8 @@ public class Main {
 		mEdit.add(mFPS);
 		mEdit.add(new JSeparator());
 		mEdit.add(mFonts);
-		mEdit.add(mAlignment);
 		mEdit.add(mColors);
 		mEdit.add(new JSeparator());
-		mEdit.add(mLines);
 		mEdit.add(mPadding);
 
 		frame.getContentPane().add(BorderLayout.NORTH, menuBar);
@@ -567,16 +568,20 @@ public class Main {
 		splitComboBox.addItemListener(
 				ev -> lyricsProcessor.loadLyrics(lyricsTextArea.getText(), (String) splitComboBox.getSelectedItem()));
 
-		play.addActionListener(ev -> player.playOrPause());
+		play.addActionListener(ev -> {
+			boolean isNowPlaying = player.playOrPause();
+			if (isNowPlaying) {
+				previewMaker.play();
+			}
+		});
 
 		stop.addActionListener(ev -> {
 			player.stop();
 			waveFormPane.stop();
-
 			previewMaker.stop();
-		});
 
-		preview.addActionListener(ev -> previewMaker.togglePlay());
+			lyricsProcessor.updateCurrentIndex(0, 0);
+		});
 
 		nudgeLeft.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), false, true));
 		nudgeRight.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), false, false));
@@ -665,10 +670,12 @@ public class Main {
 	private static class SequencerProgressChecker implements SequencerListener {
 		private JDialog dialog;
 		private JProgressBar progressBar;
+		private JLabel label;
 
-		public SequencerProgressChecker(JDialog dialog, JProgressBar progressBar) {
+		public SequencerProgressChecker(JDialog dialog, JProgressBar progressBar, JLabel label) {
 			this.dialog = dialog;
 			this.progressBar = progressBar;
+			this.label = label;
 		}
 
 		@Override
@@ -678,8 +685,9 @@ public class Main {
 		}
 
 		@Override
-		public void setProgress(double progress) {
+		public void setProgress(double progress, double elapsed, double expected) {
 			progressBar.setValue((int) (100 * progress));
+			label.setText(String.format("Seconds remaining: %.2f/%.2f", elapsed, expected));
 		}
 	}
 

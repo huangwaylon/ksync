@@ -30,9 +30,9 @@ public class OutputSequencer {
 	private LyricsProcessor lyricsProcessor;
 	private AudioPlayer player;
 
-	private boolean centerAligned;
+	private final ChineseSequencer chineseSequencer;
 
-	ChineseSequencer chineseSequencer;
+	private ExecutorService executor;
 
 	public OutputSequencer(LyricsProcessor lyricsProcessor, AudioPlayer player) {
 		this.lyricsProcessor = lyricsProcessor;
@@ -44,7 +44,11 @@ public class OutputSequencer {
 	public void export(SequencerListener listener, String outputDirectory) {
 		log.debug("Output sequencer starting export.");
 
-		ExecutorService executor = Executors.newSingleThreadExecutor();
+		if (executor != null) {
+			executor.shutdownNow();
+		}
+
+		executor = Executors.newSingleThreadExecutor();
 		executor.submit(() -> {
 			log.debug("Output sequencer starting thread: " + Thread.currentThread().getName() + " and exporting to: "
 					+ outputDirectory);
@@ -57,6 +61,14 @@ public class OutputSequencer {
 			}
 			listener.done();
 		});
+	}
+
+	public void stopExport() {
+		if (executor != null) {
+			System.out.println("Export stopped!");
+			executor.shutdownNow();
+			executor = null;
+		}
 	}
 
 	public void sequence(String outputDirectory, LyricsProcessor lyricsProcessor, AudioPlayer player,
@@ -148,11 +160,19 @@ public class OutputSequencer {
 
 			int width = widthPerFrame * framesForWord + subPhraseWidth;
 
-			encoder.encodeImage(
-					chineseSequencer.draw(currentPhrase, followingPhrase, width, colorGroup, phraseIndex % 2 == 0));
+			try {
+				encoder.encodeImage(
+						chineseSequencer.draw(currentPhrase, followingPhrase, width, colorGroup, phraseIndex % 2 == 0));
+			} catch (Exception ex) {
+				ex.printStackTrace();
+			}
 
 			framesForWord += 1;
-			listener.setProgress((double) i / totalFrames);
+
+			double elapsed = (System.currentTimeMillis() - start) / 1000.0;
+			double ratePerFrame = i == 0 ? 1 : elapsed / i;
+			double expectedTotal = ratePerFrame * totalFrames;
+			listener.setProgress((double) i / totalFrames, elapsed, expectedTotal);
 		}
 		System.out.println("Done sequencing!");
 		System.out.println("Total time: " + (System.currentTimeMillis() - start) / 1000.0);
@@ -188,17 +208,11 @@ public class OutputSequencer {
 		return alignment;
 	}
 
-	public void setAlignment(String alignment) {
-		this.alignment = alignment;
-
-		centerAligned = alignment.equals("Center");
-	}
-
 	public void setWidthAndHeight(int width, int height) {
 		this.width = width;
 		this.height = height;
 
-		chineseSequencer = new ChineseSequencer(width, height, lyricsProcessor.getOutputFont());
+		chineseSequencer.setWidthAndHeight(width, height);
 	}
 
 	public void setFPS(String fps) {
@@ -233,6 +247,10 @@ public class OutputSequencer {
 		return colorGroup;
 	}
 
+	public ChineseSequencer getChineseSequencer() {
+		return chineseSequencer;
+	}
+
 	public interface ImageGenerator {
 		public BufferedImage draw(String phrase1, String phrase2, int fraction, ColorGroup colorGroup, boolean top);
 	}
@@ -240,6 +258,6 @@ public class OutputSequencer {
 	public interface SequencerListener {
 		public void done();
 
-		public void setProgress(double progress);
+		public void setProgress(double progress, double elapsed, double expected);
 	}
 }

@@ -27,27 +27,12 @@ public class ChineseSequencer implements ImageGenerator {
 
 	private FontMetrics fontMetrics;
 
-	private String phrase = null;
-
 	public ChineseSequencer(int width, int height, Font font) {
 		this.width = width;
 		this.height = height;
 
-		background = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		backgroundGraphics = background.createGraphics();
-		backgroundGraphics.setRenderingHints(renderingHints);
-		backgroundGraphics.setFont(font);
-
-		foreground = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		foregroundGraphics = foreground.createGraphics();
-		foregroundGraphics.setRenderingHints(renderingHints);
-		foregroundGraphics.setFont(font);
-
-		output = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		outputGraphics = output.createGraphics();
-		outputGraphics.setRenderingHints(renderingHints);
-
-		fontMetrics = backgroundGraphics.getFontMetrics();
+		setWidthAndHeight(width, height);
+		setFont(font);
 	}
 
 	@Override
@@ -89,12 +74,12 @@ public class ChineseSequencer implements ImageGenerator {
 			outputGraphics.drawImage(background, 0, 0, null);
 
 			if (fraction > 0) {
-				System.out.print(String.format("top %f %f %f %f %f fraction %d %d p1 %s p2 %s", y1 - textHeight, x1, y1,
-						x2, y2, fraction, textHeight * 2, phrase1, phrase2));
+//				System.out.print(String.format("top %f %f %f %f %f fraction %d %d p1 %s p2 %s", y1 - textHeight, x1, y1,
+//						x2, y2, fraction, (int) (textHeight * 1.5), phrase1, phrase2));
 				try {
-					foregroundSubImage = foreground.getSubimage((int) x1, (int) y1 - textHeight, fraction,
-							textHeight * 2);
-					outputGraphics.drawImage(foregroundSubImage, (int) x1, (int) y1 - textHeight, null);
+					foregroundSubImage = foreground.getSubimage((int) x1, (int) (y1 - textHeight * 1.2), fraction,
+							(int) (textHeight * 1.5));
+					outputGraphics.drawImage(foregroundSubImage, (int) x1, (int) (y1 - textHeight * 1.2), null);
 				} catch (RasterFormatException ex) {
 					ex.printStackTrace();
 					log.error(ex);
@@ -112,13 +97,12 @@ public class ChineseSequencer implements ImageGenerator {
 			// Combine the two layers.
 			outputGraphics.drawImage(background, 0, 0, null);
 			if (fraction > 0) {
-				System.out.print(String.format("bot %f %f %f %f %f fraction %d %d p1 %s p2 %s", y2 - textHeight, x1, y1,
-						x2, y2, fraction, textHeight * 2, phrase1, phrase2));
-
+//				System.out.print(String.format("bot %f %f %f %f %f fraction %d %d p1 %s p2 %s", y2 - textHeight, x1, y1,
+//						x2, y2, fraction, (int) (textHeight * 1.5), phrase1, phrase2));
 				try {
-					foregroundSubImage = foreground.getSubimage((int) x2, (int) y2 - textHeight, fraction,
-							textHeight * 2);
-					outputGraphics.drawImage(foregroundSubImage, (int) x2, (int) y2 - textHeight, null);
+					foregroundSubImage = foreground.getSubimage((int) x2, (int) (y2 - textHeight * 1.2), fraction,
+							(int) (textHeight * 1.5));
+					outputGraphics.drawImage(foregroundSubImage, (int) x2, (int) (y2 - textHeight * 1.2), null);
 				} catch (RasterFormatException ex) {
 					ex.printStackTrace();
 					log.error(ex);
@@ -126,12 +110,33 @@ public class ChineseSequencer implements ImageGenerator {
 				}
 			}
 		}
-
-		System.out.println("out");
 		return output;
 	}
 
 	public int stringWidth(String input) {
 		return fontMetrics.stringWidth(input);
+	}
+
+	public void setWidthAndHeight(int width, int height) {
+		this.width = width;
+		this.height = height;
+
+		background = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		backgroundGraphics = background.createGraphics();
+		backgroundGraphics.setRenderingHints(renderingHints);
+
+		foreground = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		foregroundGraphics = foreground.createGraphics();
+		foregroundGraphics.setRenderingHints(renderingHints);
+
+		output = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		outputGraphics = output.createGraphics();
+		outputGraphics.setRenderingHints(renderingHints);
+	}
+
+	public void setFont(Font font) {
+		backgroundGraphics.setFont(font);
+		foregroundGraphics.setFont(font);
+		fontMetrics = backgroundGraphics.getFontMetrics();
 	}
 }
