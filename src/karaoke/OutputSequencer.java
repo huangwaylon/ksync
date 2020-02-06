@@ -114,14 +114,14 @@ public class OutputSequencer {
 
 				// If there is no phrase and word index available, fix final phrase.
 				if (nextPhraseIndex < 0 || nextWordIndex < 0) {
-					System.out.println("Final reached");
+					System.out.println("Final word reached.");
 					nextTimestamp = Long.MAX_VALUE;
-					followingPhrase = "";
 
 					currentPhrase = "";
+					followingPhrase = "";
 					widthPerFrame = 0;
 				} else {
-					if (phraseIndex == lyrics.length - 1) { // hack for phrase.
+					if (phraseIndex == lyrics.length - 1) {
 						followingPhrase = "";
 					} else if (phraseIndex > lastPhraseIndex) { // Moved onto new phrase?
 						followingPhrase = String.join(delimiter, lyrics[phraseIndex + 1]);
@@ -148,7 +148,8 @@ public class OutputSequencer {
 
 			int width = widthPerFrame * framesForWord + subPhraseWidth;
 
-			encoder.encodeImage(chineseSequencer.draw(currentPhrase, followingPhrase, width, colorGroup));
+			encoder.encodeImage(
+					chineseSequencer.draw(currentPhrase, followingPhrase, width, colorGroup, phraseIndex % 2 == 0));
 
 			framesForWord += 1;
 			listener.setProgress((double) i / totalFrames);
@@ -177,6 +178,10 @@ public class OutputSequencer {
 
 	public String getFPS() {
 		return fps;
+	}
+
+	public int getFramesPerSecond() {
+		return framesPerSecond;
 	}
 
 	public String getAlignment() {
@@ -229,7 +234,7 @@ public class OutputSequencer {
 	}
 
 	public interface ImageGenerator {
-		public BufferedImage draw(String phrase1, String phrase2, int fraction, ColorGroup colorGroup);
+		public BufferedImage draw(String phrase1, String phrase2, int fraction, ColorGroup colorGroup, boolean top);
 	}
 
 	public interface SequencerListener {

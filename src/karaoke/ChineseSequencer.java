@@ -27,7 +27,6 @@ public class ChineseSequencer implements ImageGenerator {
 
 	private FontMetrics fontMetrics;
 
-	private boolean top = true;
 	private String phrase = null;
 
 	public ChineseSequencer(int width, int height, Font font) {
@@ -52,7 +51,7 @@ public class ChineseSequencer implements ImageGenerator {
 	}
 
 	@Override
-	public BufferedImage draw(String phrase1, String phrase2, int fraction, ColorGroup colorGroup) {
+	public BufferedImage draw(String phrase1, String phrase2, int fraction, ColorGroup colorGroup, boolean top) {
 		// Clear foreground image.
 		foregroundGraphics.setBackground(new Color(255, 255, 255, 0));
 		foregroundGraphics.clearRect(0, 0, width, height);
@@ -63,11 +62,6 @@ public class ChineseSequencer implements ImageGenerator {
 		backgroundGraphics.setPaint(colorGroup.getNormal());
 
 		foregroundGraphics.setPaint(colorGroup.getHighlight());
-
-		if (phrase == null || !phrase1.equals(phrase)) {
-			top = !top;
-			phrase = phrase1;
-		}
 
 		int textHeight = fontMetrics.getAscent();
 		int widthOfBottomLine;

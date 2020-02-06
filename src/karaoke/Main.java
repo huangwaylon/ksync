@@ -18,6 +18,7 @@ import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
 import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
+import karaoke.AudioPlayer.AudioListener;
 import karaoke.OutputSequencer.SequencerListener;
 import karaoke.TimerService.TimerListener;
 import karaoke.WaveFormPane.WaveListener;
@@ -36,20 +37,25 @@ public class Main {
 
 	private static String audioFilePath;
 
-	public static final AudioPlayer player = new AudioPlayer();
+	private static final AudioStatusListener statusListener = new AudioStatusListener();
+	public static final AudioPlayer player = new AudioPlayer(statusListener);
 	private static final Transcoder transcoder = new Transcoder();
 
 	private static final LyricsProcessor lyricsProcessor = new LyricsProcessor(player);
 
-	private static final WaveReactor waveReactor = new WaveReactor(player, lyricsProcessor);
+	private static final WaveReactor waveReactor = new WaveReactor(player);
 
 	private static final IntervalUpdater intervalUpdater = new IntervalUpdater();
 	private static final TimerService timerService = new TimerService(intervalUpdater);
 
 	private static final OutputSequencer outputSequencer = new OutputSequencer(lyricsProcessor, player);
 
+	private static final PreviewMaker previewMaker = new PreviewMaker(lyricsProcessor, outputSequencer);
+
 	public static void main(String args[]) {
 		log.debug("Starting karaoke sync program.");
+
+		statusListener.setMaker(previewMaker);
 
 		SwingUtilities.invokeLater(new Runnable() {
 			@Override
@@ -102,7 +108,7 @@ public class Main {
 		displayScrollPane.setPreferredSize(new Dimension(250, 250));
 		displayScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
-		JScrollPane previewScrollPane = new JScrollPane(lyricsProcessor.getPreviewPanel());
+		JScrollPane previewScrollPane = new JScrollPane(previewMaker.getPreviewPanel());
 		previewScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
 		previewScrollPane.setPreferredSize(new Dimension(250, 250));
 		previewScrollPane.getVerticalScrollBar().setUnitIncrement(16);
@@ -133,6 +139,7 @@ public class Main {
 		JButton stop = new JButton("Stop");
 		JButton set = new JButton("Set");
 		JButton resetAll = new JButton("Reset All");
+		JButton preview = new JButton("Preview/Pause");
 
 		playbackTimeLabel = new JLabel("0:00/0:00");
 
@@ -150,6 +157,7 @@ public class Main {
 		syncPanel.add(stop);
 		syncPanel.add(set);
 		syncPanel.add(resetAll);
+		syncPanel.add(preview);
 
 		syncPanel.add(nudgeLeft);
 		syncPanel.add(nudgeRight);
@@ -245,6 +253,7 @@ public class Main {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				System.out.println("Export");
+				previewMaker.stop();
 
 				JFileChooser j = new JFileChooser(FileSystemView.getFileSystemView().getHomeDirectory());
 				j.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -563,8 +572,11 @@ public class Main {
 		stop.addActionListener(ev -> {
 			player.stop();
 			waveFormPane.stop();
-			lyricsProcessor.setPlaybackPosition(0);
+
+			previewMaker.stop();
 		});
+
+		preview.addActionListener(ev -> previewMaker.togglePlay());
 
 		nudgeLeft.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), false, true));
 		nudgeRight.addActionListener(ev -> lyricsProcessor.nudge(nudgeAmount.getText(), false, false));
@@ -619,19 +631,15 @@ public class Main {
 
 	private static class WaveReactor implements WaveListener {
 		private AudioPlayer audioPlayer;
-		private LyricsProcessor processor;
 
-		public WaveReactor(AudioPlayer audioPlayer, LyricsProcessor processor) {
+		public WaveReactor(AudioPlayer audioPlayer) {
 			this.audioPlayer = audioPlayer;
-			this.processor = processor;
 		}
 
 		@Override
 		public void setCurrentPosition(double x, double width) {
 			System.out.println(x);
 			audioPlayer.setPosition(x / width);
-
-			processor.setPlaybackPosition(audioPlayer.getPlaybackPosition());
 		}
 	}
 
@@ -650,7 +658,7 @@ public class Main {
 
 			playbackTimeLabel.setText(formatMicroseconds(playbackPosition) + lengthTimeStr);
 			waveFormPane.update(playbackPosition);
-			lyricsProcessor.update(playbackPosition);
+			previewMaker.update(playbackPosition);
 		}
 	}
 
@@ -672,6 +680,21 @@ public class Main {
 		@Override
 		public void setProgress(double progress) {
 			progressBar.setValue((int) (100 * progress));
+		}
+	}
+
+	private static class AudioStatusListener implements AudioListener {
+		PreviewMaker maker;
+
+		public void setMaker(PreviewMaker maker) {
+			this.maker = maker;
+		}
+
+		@Override
+		public void stopped() {
+			if (maker != null) {
+				maker.stop();
+			}
 		}
 	}
 }

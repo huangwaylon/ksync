@@ -32,21 +32,17 @@ public class LyricsProcessor {
 	private Font outputFont = new Font("Serif", Font.PLAIN, outputFontSize);
 
 	private final JPanel displayPanel;
-	private final JPanel previewPanel;
 
 	private JLabel[][] labels;
-	private JLabel[][] previewLabels;
 	private JLabel[][] timeLabels;
 
 	private String[][] lyrics;
 	private long[][] wordTimestamps;
 
 	private int phraseIndex, wordIndex;
-	private int previewPhrase, previewWord;
-	private int nextPreviewPhrase, nextPreviewWord;
 
 	private IndexSelectListener indexSelectListener;
-	
+
 	private int splitOptionValue = 0;
 
 	public LyricsProcessor(IndexSelectListener indexSelectListener) {
@@ -54,9 +50,6 @@ public class LyricsProcessor {
 
 		displayPanel = new JPanel();
 		displayPanel.setLayout(new BoxLayout(displayPanel, BoxLayout.PAGE_AXIS));
-
-		previewPanel = new JPanel();
-		previewPanel.setLayout(new BoxLayout(previewPanel, BoxLayout.PAGE_AXIS));
 	}
 
 	public void loadLyrics(String lyricsStr, String splitOption) {
@@ -69,7 +62,6 @@ public class LyricsProcessor {
 		wordTimestamps = new long[phrases.length][];
 
 		labels = new JLabel[phrases.length][];
-		previewLabels = new JLabel[phrases.length][];
 
 		timeLabels = new JLabel[phrases.length][];
 
@@ -77,7 +69,7 @@ public class LyricsProcessor {
 		String[] singleElement = new String[] { "" };
 		for (int i = 0; i < phrases.length; i++) {
 			phrases[i] = phrases[i].strip();
-			
+
 			String[] tempArray;
 			if (splitOption.equals("Word")) {
 				tempArray = phrases[i].split("\\s+");
@@ -96,7 +88,6 @@ public class LyricsProcessor {
 			wordTimestamps[i] = new long[phraseLength];
 
 			labels[i] = new JLabel[phraseLength];
-			previewLabels[i] = new JLabel[phraseLength];
 			timeLabels[i] = new JLabel[phraseLength];
 
 			Arrays.fill(wordTimestamps[i], -1);
@@ -122,7 +113,6 @@ public class LyricsProcessor {
 		}
 
 		displayPanel.removeAll();
-		previewPanel.removeAll();
 
 		for (int i = 0; i < lyrics.length; i++) {
 			JPanel phrase = new JPanel();
@@ -199,7 +189,6 @@ public class LyricsProcessor {
 				previewPhrase.add(Box.createRigidArea(new Dimension(5, 0)));
 
 				labels[i][j] = wordLabel;
-				previewLabels[i][j] = previewLabel;
 				timeLabels[i][j] = wordTiming;
 
 				if (phraseIndex == i && wordIndex == j) {
@@ -212,16 +201,10 @@ public class LyricsProcessor {
 			}
 			displayPanel.add(phrase);
 			displayPanel.add(Box.createRigidArea(new Dimension(0, 10)));
-
-			previewPanel.add(previewPhrase);
-			previewPanel.add(Box.createRigidArea(new Dimension(0, 10)));
 		}
 
 		displayPanel.revalidate();
 		displayPanel.repaint();
-
-		previewPanel.revalidate();
-		previewPanel.repaint();
 	}
 
 	public void resetAllSyncMarkers() {
@@ -247,11 +230,6 @@ public class LyricsProcessor {
 
 		phraseIndex = 0;
 		wordIndex = 0;
-
-		previewPhrase = -1;
-		previewWord = -1;
-		nextPreviewPhrase = 0;
-		nextPreviewWord = 0;
 	}
 
 	public void setTimestampForCurrentWordAndMoveToNext(long microseconds) {
@@ -364,35 +342,6 @@ public class LyricsProcessor {
 		}
 	}
 
-	public void setPlaybackPosition(long playbackPosition) {
-		if (wordTimestamps == null || lyrics == null || labels == null) {
-			log.warn("Lyrics processor can't find index given position because lyrics is null.");
-			return;
-		}
-
-		int[] result = findIndexGivenPosition(playbackPosition);
-		if (result == null) {
-			System.out.println("Lyrics processor can't find playback positions");
-			log.warn("Lyrics processor can't find playback positions");
-			return;
-		}
-		previewPhrase = result[0];
-		previewWord = result[1];
-
-		// If preview phrase and word are negative, reset next to by (0, 0).
-		if (previewPhrase < 0 || previewWord < 0) {
-			nextPreviewPhrase = 0;
-			nextPreviewWord = 0;
-		} else {
-			int[] nPair = getNextPairWithTimestampSet(previewPhrase, previewWord, wordTimestamps);
-			nextPreviewPhrase = nPair[0];
-			nextPreviewWord = nPair[1];
-		}
-
-		System.out.println("Set playback preview phrase: " + previewPhrase + " preview word: " + previewWord
-				+ " next phrase: " + nextPreviewPhrase + " next word: " + nextPreviewWord);
-	}
-
 	private int[] findIndexGivenPosition(long playbackPosition) {
 		if (wordTimestamps == null || lyrics == null || labels == null) {
 			log.warn("Lyrics processor can't find index given position because lyrics is null.");
@@ -415,35 +364,6 @@ public class LyricsProcessor {
 			}
 		}
 		return new int[] { lastSetPhrase, lastSetWord };
-	}
-
-	// Called ever X milliseconds to update preview play-back.
-	public void update(long playbackPosition) {
-		if (wordTimestamps == null || lyrics == null || labels == null) {
-			return;
-		}
-
-		if (nextPreviewPhrase < 0 || nextPreviewWord < 0) {
-			return;
-		}
-
-		long nextTime = wordTimestamps[nextPreviewPhrase][nextPreviewWord];
-		if (playbackPosition > nextTime) {
-			if (previewPhrase >= 0) {
-				previewLabels[previewPhrase][previewWord].setBackground(normalColor);
-			}
-			previewLabels[nextPreviewPhrase][nextPreviewWord].setBackground(currentColor);
-
-			previewPhrase = nextPreviewPhrase;
-			previewWord = nextPreviewWord;
-
-			int[] nPair = getNextPairWithTimestampSet(previewPhrase, previewWord, wordTimestamps);
-			nextPreviewPhrase = nPair[0];
-			nextPreviewWord = nPair[1];
-
-			System.out.println("Update playback preview phrase: " + previewPhrase + " preview word: " + previewWord
-					+ " next phrase: " + nextPreviewPhrase + " next word: " + nextPreviewWord);
-		}
 	}
 
 	public void nudge(String amount, boolean all, boolean left) {
@@ -538,11 +458,15 @@ public class LyricsProcessor {
 		return displayPanel;
 	}
 
-	public JPanel getPreviewPanel() {
-		return previewPanel;
-	}
-	
 	public int getSplitOption() {
 		return splitOptionValue;
+	}
+
+	public long[][] getWordTimestamps() {
+		return wordTimestamps;
+	}
+
+	public String delimiter() {
+		return splitOptionValue == 0 ? " " : "";
 	}
 }

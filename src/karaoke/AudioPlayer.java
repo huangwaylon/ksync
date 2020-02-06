@@ -17,6 +17,12 @@ import karaoke.LyricsProcessor.IndexSelectListener;
 
 public class AudioPlayer implements LineListener, IndexSelectListener {
 	private Clip audioClip;
+	
+	AudioListener listener;
+	
+	public AudioPlayer(AudioListener listener) {
+		this.listener = listener;
+	}
 
 	public long loadAudio(String audioFilePath) {
 		checkAndCloseAudio();
@@ -88,6 +94,7 @@ public class AudioPlayer implements LineListener, IndexSelectListener {
 			System.out.println("Playback started.");
 		} else if (type == LineEvent.Type.STOP) {
 			System.out.println("Playback completed.");
+			listener.stopped();
 		}
 	}
 
@@ -119,5 +126,9 @@ public class AudioPlayer implements LineListener, IndexSelectListener {
 			return;
 		}
 		audioClip.setMicrosecondPosition(playbackPosition);
+	}
+	
+	public interface AudioListener {
+		public void stopped();
 	}
 }
