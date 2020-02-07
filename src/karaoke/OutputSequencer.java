@@ -105,6 +105,10 @@ public class OutputSequencer {
 				+ " with frames: " + totalFrames + " nextTimestamp: " + nextTimestamp);
 
 		for (int i = 0; i < totalFrames; i++) {
+			if (Thread.interrupted()) {
+				System.out.println("Thread interrupted! Stopping loop!");
+				break;
+			}
 			System.out.println("Frame number: " + i);
 			double totalTimeSoFar = microsecondsPerFrame * i;
 
@@ -164,7 +168,8 @@ public class OutputSequencer {
 				encoder.encodeImage(
 						chineseSequencer.draw(currentPhrase, followingPhrase, width, colorGroup, phraseIndex % 2 == 0));
 			} catch (Exception ex) {
-				ex.printStackTrace();
+//				ex.printStackTrace();
+				System.out.println("Catch and ignore exception");
 			}
 
 			framesForWord += 1;

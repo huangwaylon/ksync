@@ -165,6 +165,8 @@ public class Main {
 
 		audioControlPanel.add(syncPanel);
 		audioControlPanel.add(fxPanel);
+		
+		audioControlPanel.addKeyListener(new KeyStrokeListener());
 
 		// Set minimum sizes.
 		lyricsInputPanel.setMinimumSize(minSize);
@@ -703,6 +705,27 @@ public class Main {
 			if (maker != null) {
 				maker.stop();
 			}
+		}
+	}
+
+	public static class KeyStrokeListener implements KeyListener {
+		public void keyTyped(KeyEvent e) {
+			// Invoked when a key has been typed.
+		}
+
+		public void keyPressed(KeyEvent e) {
+			// Invoked when a key has been pressed.
+			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+				long currentTimestamp = player.getPlaybackPosition();
+				if (currentTimestamp < 0) {
+					return;
+				}
+				lyricsProcessor.setTimestampForCurrentWordAndMoveToNext(currentTimestamp);
+			}
+		}
+
+		public void keyReleased(KeyEvent e) {
+			// Invoked when a key has been released.
 		}
 	}
 }
