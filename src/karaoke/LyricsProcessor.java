@@ -24,7 +24,7 @@ public class LyricsProcessor {
 	private static final Color doneColor = Color.lightGray;
 
 	private final int displayFontSize = 24;
-	private final int outputFontSize = 72;
+	private final int outputFontSize = 112;
 
 	// Fonts for editor display and final output.
 	private final Font timingFont = new Font("SansSerif", Font.PLAIN, 8);

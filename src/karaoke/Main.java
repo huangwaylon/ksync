@@ -166,8 +166,6 @@ public class Main {
 		audioControlPanel.add(syncPanel);
 		audioControlPanel.add(fxPanel);
 		
-		audioControlPanel.addKeyListener(new KeyStrokeListener());
-
 		// Set minimum sizes.
 		lyricsInputPanel.setMinimumSize(minSize);
 		syncPanel.setMinimumSize(minSize);
